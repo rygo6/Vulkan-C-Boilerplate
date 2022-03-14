@@ -45,7 +45,7 @@ enum PipelineStateObjectEnum_t
 	PSO_SCENE = 0,
 	PSO_AXES,
 	PSO_RENDERMODEL,
-	PSO_COMPANION,
+	PSO_SCREEN,
 	PSO_COUNT
 };
 
@@ -54,13 +54,23 @@ enum DescriptorSetIndex_t
 {
 	DESCRIPTOR_SET_LEFT_EYE_SCENE = 0,
 	DESCRIPTOR_SET_RIGHT_EYE_SCENE,
-	DESCRIPTOR_SET_COMPANION_LEFT_TEXTURE,
-	DESCRIPTOR_SET_COMPANION_RIGHT_TEXTURE,
+	DESCRIPTOR_SET_SCREEN_TEXTURE,
+//	DESCRIPTOR_SET_COMPANION_RIGHT_TEXTURE,
 	DESCRIPTOR_SET_LEFT_EYE_RENDER_MODEL0,
 	DESCRIPTOR_SET_LEFT_EYE_RENDER_MODEL_MAX = DESCRIPTOR_SET_LEFT_EYE_RENDER_MODEL0 + vr::k_unMaxTrackedDeviceCount,
 	DESCRIPTOR_SET_RIGHT_EYE_RENDER_MODEL0,
 	DESCRIPTOR_SET_RIGHT_EYE_RENDER_MODEL_MAX = DESCRIPTOR_SET_RIGHT_EYE_RENDER_MODEL0 + vr::k_unMaxTrackedDeviceCount,
+    DESCRIPTOR_SET_SCREEN_RENDER_MODEL0,
+    DESCRIPTOR_SET_SCREEN_RENDER_MODEL_MAX = DESCRIPTOR_SET_SCREEN_RENDER_MODEL0 + vr::k_unMaxTrackedDeviceCount,
 	NUM_DESCRIPTOR_SETS
+};
+
+enum RenderTarget
+{
+    EYE_LEFT = 0,
+    EYE_RIGHT = 1,
+    SCREEN = 2,
+    NUM_RENDER_TARGETS = 3
 };
 
 class VulkanRenderModel
@@ -71,7 +81,7 @@ public:
 
 	bool BInit( VkDevice pDevice, const VkPhysicalDeviceMemoryProperties &memoryProperties, VkCommandBuffer pCommandBuffer, vr::TrackedDeviceIndex_t unTrackedDeviceIndex, VkDescriptorSet pDescriptorSets[ 2 ], const vr::RenderModel_t & vrModel, const vr::RenderModel_TextureMap_t & vrDiffuseTexture );
 	void Cleanup();
-	void Draw( vr::EVREye nEye, VkCommandBuffer pCommandBuffer, VkPipelineLayout pPipelineLayout, const Matrix4 &matMVP );
+	void Draw( RenderTarget target, VkCommandBuffer pCommandBuffer, VkPipelineLayout pPipelineLayout, const Matrix4 &matMVP );
 	const std::string & GetName() const { return m_sModelName; }
 
 private:
@@ -86,10 +96,10 @@ private:
 	VkImageView m_pImageView;
 	VkBuffer m_pImageStagingBuffer;
 	VkDeviceMemory m_pImageStagingBufferMemory;
-	VkBuffer m_pConstantBuffer[ 2 ];
-	VkDeviceMemory m_pConstantBufferMemory[ 2 ];
-	void *m_pConstantBufferData[ 2 ];
-	VkDescriptorSet m_pDescriptorSets[ 2 ];
+	VkBuffer m_pConstantBuffer[ 3 ];
+	VkDeviceMemory m_pConstantBufferMemory[ 3 ];
+	void *m_pConstantBufferData[ 3 ];
+	VkDescriptorSet m_pDescriptorSets[ 3 ];
 	VkSampler m_pSampler;
 
 	size_t m_unVertexCount;
@@ -140,17 +150,20 @@ public:
 	void UpdateControllerAxes();
 
 	bool SetupStereoRenderTargets();
-	void SetupCompanionWindow();
+	void SetupScreenWindow();
 	void SetupCameras();
 
 	void RenderStereoTargets();
-	void RenderCompanionWindow();
-	void RenderScene( vr::Hmd_Eye nEye );
+	void RenderStereoCompanionWindow();
+    void RenderCompanionWindow();
+	void RenderScene( RenderTarget target );
 
-	Matrix4 GetHMDMatrixProjectionEye( bool isVr, vr::Hmd_Eye nEye );
+	Matrix4 GetHMDMatrixProjectionEye( vr::Hmd_Eye nEye );
 	Matrix4 GetHMDMatrixPoseEye( vr::Hmd_Eye nEye );
-	Matrix4 GetCurrentViewProjectionMatrix( vr::Hmd_Eye nEye );
+	Matrix4 GetCurrentViewProjectionMatrix( RenderTarget target );
 	void UpdateHMDMatrixPose();
+
+    Matrix4 GetCurrentCameraViewProjectionMatrix(uint8_t cameraIndex);
 
 	Matrix4 ConvertSteamVRMatrixToMatrix4( const vr::HmdMatrix34_t &matPose );
 
@@ -243,9 +256,9 @@ private:
 	VkBuffer m_pSceneVertexBuffer;
 	VkDeviceMemory m_pSceneVertexBufferMemory;
 	VkBufferView m_pSceneVertexBufferView;
-	VkBuffer m_pSceneConstantBuffer[ 2 ];
-	VkDeviceMemory m_pSceneConstantBufferMemory[ 2 ];
-	void *m_pSceneConstantBufferData[ 2 ];
+	VkBuffer m_pSceneConstantBuffer[ 3 ];
+	VkDeviceMemory m_pSceneConstantBufferMemory[ 3 ];
+	void *m_pSceneConstantBufferData[ 3 ];
 	VkImage m_pSceneImage;
 	VkDeviceMemory m_pSceneImageMemory;
 	VkImageView m_pSceneImageView;
@@ -276,9 +289,14 @@ private:
 	Matrix4 m_mat4eyePosLeft;
 	Matrix4 m_mat4eyePosRight;
 
-	Matrix4 m_mat4ProjectionCenter;
+//	Matrix4 m_mat4ProjectionCenter;
 	Matrix4 m_mat4ProjectionLeft;
 	Matrix4 m_mat4ProjectionRight;
+
+    bool m_bRenderScreen;
+
+    Matrix4 m_mat4ScreenPos;
+    Matrix4 m_mat4ProjectionScreen;
 
 	struct VertexDataScene
 	{
@@ -307,13 +325,18 @@ private:
 		VkRenderPass m_pRenderPass;
 		VkFramebuffer m_pFramebuffer;
 	};
-	FramebufferDesc m_leftEyeDesc;
-	FramebufferDesc m_rightEyeDesc;
+	FramebufferDesc m_leftEyeBufferDesc;
+	FramebufferDesc m_rightEyeBufferDesc;
+
+    FramebufferDesc m_screenBufferDesc;
 
 	bool CreateFrameBuffer( int nWidth, int nHeight, FramebufferDesc &framebufferDesc );
 	
-	uint32_t m_nRenderWidth;
-	uint32_t m_nRenderHeight;
+	uint32_t m_nHMDRenderWidth;
+	uint32_t m_nHMDRenderHeight;
+
+    uint32_t m_nScreenRenderWidth;
+    uint32_t m_nScreenRenderHeight;
 
 	std::vector< VulkanRenderModel * > m_vecRenderModels;
 	VulkanRenderModel *m_rTrackedDeviceToRenderModel[ vr::k_unMaxTrackedDeviceCount ];
@@ -511,14 +534,15 @@ CMainApplication::CMainApplication( int argc, char *argv[] )
 	, m_pControllerAxesVertexBuffer( VK_NULL_HANDLE )
 	, m_pControllerAxesVertexBufferMemory( VK_NULL_HANDLE )
 {
-	memset( &m_leftEyeDesc, 0, sizeof( m_leftEyeDesc ) );
-	memset( &m_rightEyeDesc, 0, sizeof( m_rightEyeDesc ) );
+	memset(&m_leftEyeBufferDesc, 0, sizeof( m_leftEyeBufferDesc ) );
+	memset(&m_rightEyeBufferDesc, 0, sizeof( m_rightEyeBufferDesc ) );
+	memset(&m_screenBufferDesc, 0, sizeof( m_screenBufferDesc ) );
 	memset( &m_pShaderModules[ 0 ], 0, sizeof( m_pShaderModules ) );
 	memset( &m_pPipelines[ 0 ], 0, sizeof( m_pPipelines ) );
 	memset( m_pSceneConstantBufferData, 0, sizeof( m_pSceneConstantBufferData ) );
 	memset( m_pDescriptorSets, 0, sizeof( m_pDescriptorSets ) );
 
-    m_bIsVR = false;
+    m_bRenderScreen = true;
 
 	for( int i = 1; i < argc; i++ )
 	{
@@ -1441,7 +1465,7 @@ bool CMainApplication::BInitVulkan()
 	SetupScene();
 	SetupCameras();
 	SetupStereoRenderTargets();
-	SetupCompanionWindow();
+    SetupScreenWindow();
 	
 	if( !CreateAllShaders() )
 		return false;
@@ -1518,7 +1542,7 @@ void CMainApplication::Shutdown()
 		vkDestroyCommandPool( m_pDevice, m_pCommandPool, nullptr );
 		vkDestroyDescriptorPool( m_pDevice, m_pDescriptorPool, nullptr );
 
-		FramebufferDesc *pFramebufferDescs[2] = { &m_leftEyeDesc, &m_rightEyeDesc };
+		FramebufferDesc *pFramebufferDescs[3] = {&m_leftEyeBufferDesc, &m_rightEyeBufferDesc, &m_screenBufferDesc };
 		for ( int32_t nFramebuffer = 0; nFramebuffer < 2; nFramebuffer++ )
 		{
 			if ( pFramebufferDescs[ nFramebuffer ]->m_pImageView != VK_NULL_HANDLE )
@@ -1620,6 +1644,16 @@ bool CMainApplication::HandleInput()
 				m_bShowCubes = !m_bShowCubes;
 			}
 		}
+        else if ( sdlEvent.type == SDL_MOUSEMOTION )
+        {
+            dprintf( "Mouse Move %i %i\n", sdlEvent.motion.xrel, sdlEvent.motion.yrel );
+//            m_mat4HMDPose = m_mat4HMDPose.rotateY(sdlEvent.motion.xrel);
+//            m_mat4HMDPose = m_mat4HMDPose.rotateX(sdlEvent.motion.yrel);
+//            m_mat4ProjectionScreen = m_mat4ProjectionScreen.rotateY(sdlEvent.motion.xrel);
+//            m_mat4ProjectionScreen = m_mat4ProjectionScreen.rotateX(sdlEvent.motion.yrel);
+            m_mat4ScreenPos = m_mat4ScreenPos.rotateY(sdlEvent.motion.xrel);
+            m_mat4ScreenPos = m_mat4ScreenPos.rotateX(sdlEvent.motion.yrel);
+        }
 	}
 
 	// Process SteamVR events
@@ -1704,7 +1738,8 @@ void CMainApplication::RenderFrame()
 
 		UpdateControllerAxes();
 		RenderStereoTargets();
-		RenderCompanionWindow();
+//        RenderStereoCompanionWindow();
+        RenderCompanionWindow();
 
 		// End the command buffer
 		vkEndCommandBuffer( m_currentCommandBuffer.m_pCommandBuffer );
@@ -1733,22 +1768,22 @@ void CMainApplication::RenderFrame()
 		bounds.vMax = 1.0f;
 
 		vr::VRVulkanTextureData_t vulkanData;
-		vulkanData.m_nImage = ( uint64_t ) m_leftEyeDesc.m_pImage;
+		vulkanData.m_nImage = ( uint64_t ) m_leftEyeBufferDesc.m_pImage;
 		vulkanData.m_pDevice = ( VkDevice_T * ) m_pDevice;
 		vulkanData.m_pPhysicalDevice = ( VkPhysicalDevice_T * ) m_pPhysicalDevice;
 		vulkanData.m_pInstance = ( VkInstance_T *) m_pInstance;
 		vulkanData.m_pQueue = ( VkQueue_T * ) m_pQueue;
 		vulkanData.m_nQueueFamilyIndex = m_nQueueFamilyIndex;
 
-		vulkanData.m_nWidth = m_nRenderWidth;
-		vulkanData.m_nHeight = m_nRenderHeight;
+		vulkanData.m_nWidth = m_nHMDRenderWidth;
+		vulkanData.m_nHeight = m_nHMDRenderHeight;
 		vulkanData.m_nFormat = VK_FORMAT_R8G8B8A8_SRGB;
 		vulkanData.m_nSampleCount = m_nMSAASampleCount;
 
 		vr::Texture_t texture = { &vulkanData, vr::TextureType_Vulkan, vr::ColorSpace_Auto };
 		vr::VRCompositor()->Submit( vr::Eye_Left, &texture, &bounds );
 		
-		vulkanData.m_nImage = ( uint64_t ) m_rightEyeDesc.m_pImage;
+		vulkanData.m_nImage = ( uint64_t ) m_rightEyeBufferDesc.m_pImage;
 		vr::VRCompositor()->Submit( vr::Eye_Right, &texture, &bounds );
 	}
 
@@ -1885,10 +1920,10 @@ bool CMainApplication::CreateAllShaders()
 	// Renderpass for each PSO that is compatible with what it will render to
 	VkRenderPass pRenderPasses[ PSO_COUNT ] =
 	{
-		m_leftEyeDesc.m_pRenderPass,
-		m_leftEyeDesc.m_pRenderPass,
-		m_leftEyeDesc.m_pRenderPass,
-		m_pSwapchainRenderPass
+            m_leftEyeBufferDesc.m_pRenderPass,
+            m_leftEyeBufferDesc.m_pRenderPass,
+            m_leftEyeBufferDesc.m_pRenderPass,
+            m_pSwapchainRenderPass
 	};
 
 	size_t nStrides[ PSO_COUNT ] =
@@ -1896,7 +1931,7 @@ bool CMainApplication::CreateAllShaders()
 		sizeof( VertexDataScene ),			// PSO_SCENE
 		sizeof( float ) * 6,				// PSO_AXES
 		sizeof( vr::RenderModel_Vertex_t ),	// PSO_RENDERMODEL
-		sizeof( VertexDataWindow )			// PSO_COMPANION
+		sizeof( VertexDataWindow )			// PSO_SCREEN
 	};
 
 	VkVertexInputAttributeDescription attributeDescriptions[ PSO_COUNT * 3 ]
@@ -1913,7 +1948,7 @@ bool CMainApplication::CreateAllShaders()
 		{ 0, 0, VK_FORMAT_R32G32B32_SFLOAT,	0 },
 		{ 1, 0, VK_FORMAT_R32G32B32_SFLOAT,	offsetof( vr::RenderModel_Vertex_t, vNormal ) },
 		{ 2, 0, VK_FORMAT_R32G32_SFLOAT,	offsetof( vr::RenderModel_Vertex_t, rfTextureCoord ) },
-		// PSO_COMPANION
+		// PSO_SCREEN
 		{ 0, 0, VK_FORMAT_R32G32_SFLOAT,	0 },
 		{ 1, 0, VK_FORMAT_R32G32_SFLOAT,	sizeof( float ) * 2 },
 		{ 0, 0, VK_FORMAT_UNDEFINED,		0 },
@@ -1945,8 +1980,8 @@ bool CMainApplication::CreateAllShaders()
 		// VkPipelineDepthStencilStateCreateInfo
 		VkPipelineDepthStencilStateCreateInfo dsState = { VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
 		dsState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-		dsState.depthTestEnable = ( nPSO != PSO_COMPANION ) ? VK_TRUE : VK_FALSE;
-		dsState.depthWriteEnable = ( nPSO != PSO_COMPANION ) ? VK_TRUE : VK_FALSE;
+		dsState.depthTestEnable = (nPSO != PSO_SCREEN ) ? VK_TRUE : VK_FALSE;
+		dsState.depthWriteEnable = (nPSO != PSO_SCREEN ) ? VK_TRUE : VK_FALSE;
 		dsState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
 		dsState.depthBoundsTestEnable = VK_FALSE;
 		dsState.stencilTestEnable = VK_FALSE;
@@ -1977,7 +2012,7 @@ bool CMainApplication::CreateAllShaders()
 
 		// VkPipelineMultisampleStateCreateInfo
 		VkPipelineMultisampleStateCreateInfo msState = { VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
-		msState.rasterizationSamples = ( nPSO == PSO_COMPANION ) ? VK_SAMPLE_COUNT_1_BIT : ( VkSampleCountFlagBits ) m_nMSAASampleCount;
+		msState.rasterizationSamples = (nPSO == PSO_SCREEN ) ? VK_SAMPLE_COUNT_1_BIT : ( VkSampleCountFlagBits ) m_nMSAASampleCount;
 		msState.minSampleShading = 0.0f;
 		uint32_t nSampleMask = 0xFFFFFFFF;
 		msState.pSampleMask = &nSampleMask;
@@ -2069,10 +2104,10 @@ void CMainApplication::CreateAllDescriptorSets()
 	}
 
 	// Scene descriptor sets
-	for ( uint32_t nEye = 0; nEye < 2; nEye++ )
+	for (uint32_t renderTargetIndex = 0; renderTargetIndex < RenderTarget::NUM_RENDER_TARGETS; renderTargetIndex++ )
 	{
 		VkDescriptorBufferInfo bufferInfo = {};
-		bufferInfo.buffer = m_pSceneConstantBuffer[ nEye ];
+		bufferInfo.buffer = m_pSceneConstantBuffer[ renderTargetIndex ];
 		bufferInfo.offset = 0;
 		bufferInfo.range = VK_WHOLE_SIZE;
 		
@@ -2085,19 +2120,19 @@ void CMainApplication::CreateAllDescriptorSets()
 
 		VkWriteDescriptorSet writeDescriptorSets[ 3 ] = { };
 		writeDescriptorSets[ 0 ].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writeDescriptorSets[ 0 ].dstSet = m_pDescriptorSets[ DESCRIPTOR_SET_LEFT_EYE_SCENE + nEye ];
+		writeDescriptorSets[ 0 ].dstSet = m_pDescriptorSets[DESCRIPTOR_SET_LEFT_EYE_SCENE + renderTargetIndex ];
 		writeDescriptorSets[ 0 ].dstBinding = 0;
 		writeDescriptorSets[ 0 ].descriptorCount = 1;
 		writeDescriptorSets[ 0 ].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		writeDescriptorSets[ 0 ].pBufferInfo = &bufferInfo;
 		writeDescriptorSets[ 1 ].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writeDescriptorSets[ 1 ].dstSet = m_pDescriptorSets[ DESCRIPTOR_SET_LEFT_EYE_SCENE + nEye ];
+		writeDescriptorSets[ 1 ].dstSet = m_pDescriptorSets[DESCRIPTOR_SET_LEFT_EYE_SCENE + renderTargetIndex ];
 		writeDescriptorSets[ 1 ].dstBinding = 1;
 		writeDescriptorSets[ 1 ].descriptorCount = 1;
 		writeDescriptorSets[ 1 ].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 		writeDescriptorSets[ 1 ].pImageInfo = &imageInfo;
 		writeDescriptorSets[ 2 ].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writeDescriptorSets[ 2 ].dstSet = m_pDescriptorSets[ DESCRIPTOR_SET_LEFT_EYE_SCENE + nEye ];
+		writeDescriptorSets[ 2 ].dstSet = m_pDescriptorSets[DESCRIPTOR_SET_LEFT_EYE_SCENE + renderTargetIndex ];
 		writeDescriptorSets[ 2 ].dstBinding = 2;
 		writeDescriptorSets[ 2 ].descriptorCount = 1;
 		writeDescriptorSets[ 2 ].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
@@ -2108,22 +2143,22 @@ void CMainApplication::CreateAllDescriptorSets()
 
 	// Companion window descriptor sets
 	{
-		VkDescriptorImageInfo imageInfo = {};
-		imageInfo.imageView = m_leftEyeDesc.m_pImageView;
-		imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+//		VkDescriptorImageInfo imageInfo = {};
+//		imageInfo.imageView = m_leftEyeBufferDesc.m_pImageView;
+//		imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+//
+//		VkWriteDescriptorSet writeDescriptorSets[ 1 ] = { };
+//		writeDescriptorSets[ 0 ].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+//		writeDescriptorSets[ 0 ].dstSet = m_pDescriptorSets[ DESCRIPTOR_SET_SCREEN_TEXTURE ];
+//		writeDescriptorSets[ 0 ].dstBinding = 1;
+//		writeDescriptorSets[ 0 ].descriptorCount = 1;
+//		writeDescriptorSets[ 0 ].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+//		writeDescriptorSets[ 0 ].pImageInfo = &imageInfo;
+//		vkUpdateDescriptorSets( m_pDevice, _countof( writeDescriptorSets ), writeDescriptorSets, 0, nullptr );
 
-		VkWriteDescriptorSet writeDescriptorSets[ 1 ] = { };
-		writeDescriptorSets[ 0 ].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writeDescriptorSets[ 0 ].dstSet = m_pDescriptorSets[ DESCRIPTOR_SET_COMPANION_LEFT_TEXTURE ];
-		writeDescriptorSets[ 0 ].dstBinding = 1;
-		writeDescriptorSets[ 0 ].descriptorCount = 1;
-		writeDescriptorSets[ 0 ].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-		writeDescriptorSets[ 0 ].pImageInfo = &imageInfo;
-		vkUpdateDescriptorSets( m_pDevice, _countof( writeDescriptorSets ), writeDescriptorSets, 0, nullptr );
-
-		imageInfo.imageView = m_rightEyeDesc.m_pImageView;
-		writeDescriptorSets[ 0 ].dstSet = m_pDescriptorSets[ DESCRIPTOR_SET_COMPANION_RIGHT_TEXTURE ];
-		vkUpdateDescriptorSets( m_pDevice, _countof( writeDescriptorSets ), writeDescriptorSets, 0, nullptr );
+//		imageInfo.imageView = m_rightEyeBufferDesc.m_pImageView;
+//		writeDescriptorSets[ 0 ].dstSet = m_pDescriptorSets[ DESCRIPTOR_SET_COMPANION_RIGHT_TEXTURE ];
+//		vkUpdateDescriptorSets( m_pDevice, _countof( writeDescriptorSets ), writeDescriptorSets, 0, nullptr );
 	}
 	
 }
@@ -2371,25 +2406,25 @@ void CMainApplication::SetupScene()
 	}
 	
 	// Create constant buffer to hold the per-eye CB data
-	for ( uint32_t nEye = 0; nEye < 2; nEye++ )
+	for (uint32_t targetIndex = 0; targetIndex < RenderTarget::NUM_RENDER_TARGETS; targetIndex++ )
 	{
 		VkBufferCreateInfo bufferCreateInfo = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 		bufferCreateInfo.size = sizeof( Matrix4 );
 		bufferCreateInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-		vkCreateBuffer( m_pDevice, &bufferCreateInfo, nullptr, &m_pSceneConstantBuffer[ nEye ] );
+		vkCreateBuffer( m_pDevice, &bufferCreateInfo, nullptr, &m_pSceneConstantBuffer[ targetIndex ] );
 
 		VkMemoryRequirements memoryRequirements = { };
-		vkGetBufferMemoryRequirements( m_pDevice, m_pSceneConstantBuffer[ nEye ], &memoryRequirements );
+		vkGetBufferMemoryRequirements(m_pDevice, m_pSceneConstantBuffer[ targetIndex ], &memoryRequirements );
 
 		VkMemoryAllocateInfo allocInfo = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
 		MemoryTypeFromProperties( m_physicalDeviceMemoryProperties, memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT, &allocInfo.memoryTypeIndex );
 		allocInfo.allocationSize = memoryRequirements.size;
 
-		vkAllocateMemory( m_pDevice, &allocInfo, nullptr, &m_pSceneConstantBufferMemory[ nEye ] );
-		vkBindBufferMemory( m_pDevice, m_pSceneConstantBuffer[ nEye ], m_pSceneConstantBufferMemory[ nEye ], 0 );
+		vkAllocateMemory( m_pDevice, &allocInfo, nullptr, &m_pSceneConstantBufferMemory[ targetIndex ] );
+		vkBindBufferMemory(m_pDevice, m_pSceneConstantBuffer[ targetIndex ], m_pSceneConstantBufferMemory[ targetIndex ], 0 );
 
 		// Map and keep mapped persistently
-		vkMapMemory( m_pDevice, m_pSceneConstantBufferMemory[ nEye ], 0, VK_WHOLE_SIZE, 0, &m_pSceneConstantBufferData[ nEye ] );
+		vkMapMemory(m_pDevice, m_pSceneConstantBufferMemory[ targetIndex ], 0, VK_WHOLE_SIZE, 0, &m_pSceneConstantBufferData[ targetIndex ] );
 	}
 }
 
@@ -2573,10 +2608,13 @@ void CMainApplication::UpdateControllerAxes()
 //-----------------------------------------------------------------------------
 void CMainApplication::SetupCameras()
 {
-	m_mat4ProjectionLeft = GetHMDMatrixProjectionEye(m_bIsVR, vr::Eye_Left );
-	m_mat4ProjectionRight = GetHMDMatrixProjectionEye(m_bIsVR, vr::Eye_Right );
+	m_mat4ProjectionLeft = GetHMDMatrixProjectionEye(vr::Eye_Left );
+	m_mat4ProjectionRight = GetHMDMatrixProjectionEye(vr::Eye_Right );
 	m_mat4eyePosLeft = GetHMDMatrixPoseEye( vr::Eye_Left );
 	m_mat4eyePosRight = GetHMDMatrixPoseEye( vr::Eye_Right );
+
+    m_mat4ProjectionScreen = m_mat4ProjectionLeft;
+    m_mat4ScreenPos = m_mat4eyePosLeft;
 }
 
 //-----------------------------------------------------------------------------
@@ -2818,36 +2856,38 @@ bool CMainApplication::SetupStereoRenderTargets()
 	if ( !m_pHMD )
 		return false;
 
-	m_pHMD->GetRecommendedRenderTargetSize( &m_nRenderWidth, &m_nRenderHeight );
-	m_nRenderWidth = ( uint32_t )( m_flSuperSampleScale * ( float ) m_nRenderWidth );
-	m_nRenderHeight = ( uint32_t )( m_flSuperSampleScale * ( float ) m_nRenderHeight );
+	m_pHMD->GetRecommendedRenderTargetSize(&m_nHMDRenderWidth, &m_nHMDRenderHeight );
+    m_nHMDRenderWidth = ( uint32_t )(m_flSuperSampleScale * ( float ) m_nHMDRenderWidth );
+    m_nHMDRenderHeight = ( uint32_t )(m_flSuperSampleScale * ( float ) m_nHMDRenderHeight );
 
-	CreateFrameBuffer( m_nRenderWidth, m_nRenderHeight, m_leftEyeDesc );
-	CreateFrameBuffer( m_nRenderWidth, m_nRenderHeight, m_rightEyeDesc );
+	CreateFrameBuffer(m_nHMDRenderWidth, m_nHMDRenderHeight, m_leftEyeBufferDesc );
+	CreateFrameBuffer(m_nHMDRenderWidth, m_nHMDRenderHeight, m_rightEyeBufferDesc );
 	return true;
 }
 
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
-void CMainApplication::SetupCompanionWindow()
+void CMainApplication::SetupScreenWindow()
 {
 	if ( !m_pHMD )
 		return;
+
+//    m_nHMDRenderWidth = ( uint32_t )(m_flSuperSampleScale * ( float ) m_nHMDRenderWidth );
+//    m_nHMDRenderHeight = ( uint32_t )(m_flSuperSampleScale * ( float ) m_nHMDRenderHeight );
+    m_nScreenRenderWidth = ( uint32_t )m_nCompanionWindowWidth;
+    m_nScreenRenderHeight = ( uint32_t )m_nCompanionWindowHeight;
+
+    CreateFrameBuffer(m_nScreenRenderWidth, m_nScreenRenderHeight, m_screenBufferDesc );
 
 	std::vector<VertexDataWindow> vVerts;
 
 	// left eye verts
 	vVerts.push_back( VertexDataWindow( Vector2(-1, -1), Vector2(0, 1)) );
-	vVerts.push_back( VertexDataWindow( Vector2(0, -1), Vector2(1, 1)) );
-	vVerts.push_back( VertexDataWindow( Vector2(-1, 1), Vector2(0, 0)) );
-	vVerts.push_back( VertexDataWindow( Vector2(0, 1), Vector2(1, 0)) );
-
-	// right eye verts
-	vVerts.push_back( VertexDataWindow( Vector2(0, -1), Vector2(0, 1)) );
 	vVerts.push_back( VertexDataWindow( Vector2(1, -1), Vector2(1, 1)) );
-	vVerts.push_back( VertexDataWindow( Vector2(0, 1), Vector2(0, 0)) );
+	vVerts.push_back( VertexDataWindow( Vector2(-1, 1), Vector2(0, 0)) );
 	vVerts.push_back( VertexDataWindow( Vector2(1, 1), Vector2(1, 0)) );
+
 
 	// Create the vertex buffer and fill with data
 	if ( !CreateVulkanBuffer( m_pDevice, m_physicalDeviceMemoryProperties, &vVerts[ 0 ], sizeof( VertexDataWindow ) * vVerts.size(),
@@ -2857,7 +2897,7 @@ void CMainApplication::SetupCompanionWindow()
 	}
 
 	// Create index buffer
-	uint16_t vIndices[] = { 0, 1, 3,   0, 3, 2,   4, 5, 7,   4, 7, 6};
+	uint16_t vIndices[] = { 0, 1, 3,   0, 3, 2 };
 	m_uiCompanionWindowIndexSize = _countof( vIndices );
 	if ( !CreateVulkanBuffer( m_pDevice, m_physicalDeviceMemoryProperties, &vIndices[ 0 ], sizeof( vIndices ),
 							  VK_BUFFER_USAGE_INDEX_BUFFER_BIT, &m_pCompanionWindowIndexBuffer, &m_pCompanionWindowIndexBufferMemory ) )
@@ -2892,9 +2932,9 @@ void CMainApplication::RenderStereoTargets()
 {
 
 	// Set viewport and scissor
-	VkViewport viewport = { 0.0f, 0.0f, (float ) m_nRenderWidth, ( float ) m_nRenderHeight, 0.0f, 1.0f };
+	VkViewport viewport = {0.0f, 0.0f, (float ) m_nHMDRenderWidth, ( float ) m_nHMDRenderHeight, 0.0f, 1.0f };
 	vkCmdSetViewport( m_currentCommandBuffer.m_pCommandBuffer, 0, 1, &viewport );
-	VkRect2D scissor = { 0, 0, m_nRenderWidth, m_nRenderHeight };
+	VkRect2D scissor = {0, 0, m_nHMDRenderWidth, m_nHMDRenderHeight };
 	vkCmdSetScissor( m_currentCommandBuffer.m_pCommandBuffer, 0, 1, &scissor );
 
 	//----------//
@@ -2904,9 +2944,9 @@ void CMainApplication::RenderStereoTargets()
 	VkImageMemoryBarrier imageMemoryBarrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 	imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
 	imageMemoryBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-	imageMemoryBarrier.oldLayout = m_leftEyeDesc.m_nImageLayout;
+	imageMemoryBarrier.oldLayout = m_leftEyeBufferDesc.m_nImageLayout;
 	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-	imageMemoryBarrier.image = m_leftEyeDesc.m_pImage;
+	imageMemoryBarrier.image = m_leftEyeBufferDesc.m_pImage;
 	imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
 	imageMemoryBarrier.subresourceRange.levelCount = 1;
@@ -2915,29 +2955,29 @@ void CMainApplication::RenderStereoTargets()
 	imageMemoryBarrier.srcQueueFamilyIndex = m_nQueueFamilyIndex;
 	imageMemoryBarrier.dstQueueFamilyIndex = m_nQueueFamilyIndex;
 	vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
-	m_leftEyeDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
+    m_leftEyeBufferDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
 
 	// Transition the depth buffer to VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL on first use
-	if ( m_leftEyeDesc.m_nDepthStencilImageLayout == VK_IMAGE_LAYOUT_UNDEFINED )
+	if (m_leftEyeBufferDesc.m_nDepthStencilImageLayout == VK_IMAGE_LAYOUT_UNDEFINED )
 	{
-		imageMemoryBarrier.image = m_leftEyeDesc.m_pDepthStencilImage;
+		imageMemoryBarrier.image = m_leftEyeBufferDesc.m_pDepthStencilImage;
 		imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 		imageMemoryBarrier.srcAccessMask = 0;
 		imageMemoryBarrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-		imageMemoryBarrier.oldLayout = m_leftEyeDesc.m_nDepthStencilImageLayout;
+		imageMemoryBarrier.oldLayout = m_leftEyeBufferDesc.m_nDepthStencilImageLayout;
 		imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 		vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
-		m_leftEyeDesc.m_nDepthStencilImageLayout = imageMemoryBarrier.newLayout;
+        m_leftEyeBufferDesc.m_nDepthStencilImageLayout = imageMemoryBarrier.newLayout;
 	}
 
 	// Start the renderpass
 	VkRenderPassBeginInfo renderPassBeginInfo = { VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
-	renderPassBeginInfo.renderPass = m_leftEyeDesc.m_pRenderPass;
-	renderPassBeginInfo.framebuffer = m_leftEyeDesc.m_pFramebuffer;
+	renderPassBeginInfo.renderPass = m_leftEyeBufferDesc.m_pRenderPass;
+	renderPassBeginInfo.framebuffer = m_leftEyeBufferDesc.m_pFramebuffer;
 	renderPassBeginInfo.renderArea.offset.x = 0;
 	renderPassBeginInfo.renderArea.offset.y = 0;
-	renderPassBeginInfo.renderArea.extent.width = m_nRenderWidth;
-	renderPassBeginInfo.renderArea.extent.height = m_nRenderHeight;
+	renderPassBeginInfo.renderArea.extent.width = m_nHMDRenderWidth;
+	renderPassBeginInfo.renderArea.extent.height = m_nHMDRenderHeight;
 	renderPassBeginInfo.clearValueCount = 2;
 	VkClearValue clearValues[ 2 ];
 	clearValues[ 0 ].color.float32[ 0 ] = 0.0f;
@@ -2946,83 +2986,84 @@ void CMainApplication::RenderStereoTargets()
 	clearValues[ 0 ].color.float32[ 3 ] = 1.0f;
 	clearValues[ 1 ].depthStencil.depth = 1.0f;
 	clearValues[ 1 ].depthStencil.stencil = 0;
+//    renderPassBeginInfo.clearValueCount = _countof( clearValues );
 	renderPassBeginInfo.pClearValues = &clearValues[ 0 ];
 	vkCmdBeginRenderPass( m_currentCommandBuffer.m_pCommandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE );
 
-	RenderScene( vr::Eye_Left );
+	RenderScene( RenderTarget::EYE_LEFT );
 
 	vkCmdEndRenderPass( m_currentCommandBuffer.m_pCommandBuffer );
 	
 	// Transition eye image to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL for display on the companion window
-	imageMemoryBarrier.image = m_leftEyeDesc.m_pImage;
+	imageMemoryBarrier.image = m_leftEyeBufferDesc.m_pImage;
 	imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	imageMemoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 	imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-	imageMemoryBarrier.oldLayout = m_leftEyeDesc.m_nImageLayout;
+	imageMemoryBarrier.oldLayout = m_leftEyeBufferDesc.m_nImageLayout;
 	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 	vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
-	m_leftEyeDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
+    m_leftEyeBufferDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
 
 	//-----------//
 	// Right Eye //
 	//-----------//
 	// Transition to VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-	imageMemoryBarrier.image = m_rightEyeDesc.m_pImage;
+	imageMemoryBarrier.image = m_rightEyeBufferDesc.m_pImage;
 	imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
 	imageMemoryBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-	imageMemoryBarrier.oldLayout = m_rightEyeDesc.m_nImageLayout;
+	imageMemoryBarrier.oldLayout = m_rightEyeBufferDesc.m_nImageLayout;
 	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 	vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
-	m_rightEyeDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
+    m_rightEyeBufferDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
 
 	// Transition the depth buffer to VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL on first use
-	if ( m_rightEyeDesc.m_nDepthStencilImageLayout == VK_IMAGE_LAYOUT_UNDEFINED )
+	if (m_rightEyeBufferDesc.m_nDepthStencilImageLayout == VK_IMAGE_LAYOUT_UNDEFINED )
 	{
-		imageMemoryBarrier.image = m_rightEyeDesc.m_pDepthStencilImage;
+		imageMemoryBarrier.image = m_rightEyeBufferDesc.m_pDepthStencilImage;
 		imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 		imageMemoryBarrier.srcAccessMask = 0;
 		imageMemoryBarrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-		imageMemoryBarrier.oldLayout = m_rightEyeDesc.m_nDepthStencilImageLayout;
+		imageMemoryBarrier.oldLayout = m_rightEyeBufferDesc.m_nDepthStencilImageLayout;
 		imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 		vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
-		m_rightEyeDesc.m_nDepthStencilImageLayout = imageMemoryBarrier.newLayout;
+        m_rightEyeBufferDesc.m_nDepthStencilImageLayout = imageMemoryBarrier.newLayout;
 	}
 
 	// Start the renderpass
-	renderPassBeginInfo.renderPass = m_rightEyeDesc.m_pRenderPass;
-	renderPassBeginInfo.framebuffer = m_rightEyeDesc.m_pFramebuffer;
+	renderPassBeginInfo.renderPass = m_rightEyeBufferDesc.m_pRenderPass;
+	renderPassBeginInfo.framebuffer = m_rightEyeBufferDesc.m_pFramebuffer;
 	renderPassBeginInfo.pClearValues = &clearValues[ 0 ];
 	vkCmdBeginRenderPass( m_currentCommandBuffer.m_pCommandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE );
 
-	RenderScene( vr::Eye_Right );
+	RenderScene( RenderTarget::EYE_RIGHT );
 
 	vkCmdEndRenderPass( m_currentCommandBuffer.m_pCommandBuffer );
 	
 	// Transition eye image to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL for display on the companion window
-	imageMemoryBarrier.image = m_rightEyeDesc.m_pImage;
+	imageMemoryBarrier.image = m_rightEyeBufferDesc.m_pImage;
 	imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	imageMemoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 	imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-	imageMemoryBarrier.oldLayout = m_rightEyeDesc.m_nImageLayout;
+	imageMemoryBarrier.oldLayout = m_rightEyeBufferDesc.m_nImageLayout;
 	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 	vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
-	m_rightEyeDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
+    m_rightEyeBufferDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: Renders a scene with respect to nEye.
 //-----------------------------------------------------------------------------
-void CMainApplication::RenderScene( vr::Hmd_Eye nEye )
+void CMainApplication::RenderScene( RenderTarget target )
 {
 	if( m_bShowCubes )
 	{
 		vkCmdBindPipeline( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelines[ PSO_SCENE ] );
 		
 		// Update the persistently mapped pointer to the CB data with the latest matrix
-		memcpy( m_pSceneConstantBufferData[ nEye ], GetCurrentViewProjectionMatrix( nEye ).get(), sizeof( Matrix4 ) );
+		memcpy( m_pSceneConstantBufferData[ target ], GetCurrentViewProjectionMatrix( target ).get(), sizeof( Matrix4 ) );
 
-		vkCmdBindDescriptorSets( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelineLayout, 0, 1, &m_pDescriptorSets[ DESCRIPTOR_SET_LEFT_EYE_SCENE + nEye ], 0, nullptr );
+		vkCmdBindDescriptorSets( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelineLayout, 0, 1, &m_pDescriptorSets[ DESCRIPTOR_SET_LEFT_EYE_SCENE + target ], 0, nullptr );
 
 		// Draw
 		VkDeviceSize nOffsets[ 1 ] = { 0 };
@@ -3056,16 +3097,16 @@ void CMainApplication::RenderScene( vr::Hmd_Eye nEye )
 			continue;
 
 		const Matrix4 & matDeviceToTracking = m_rmat4DevicePose[ unTrackedDevice ];
-		Matrix4 matMVP = GetCurrentViewProjectionMatrix( nEye ) * matDeviceToTracking;
+		Matrix4 matMVP = GetCurrentViewProjectionMatrix( target ) * matDeviceToTracking;
 		
-		m_rTrackedDeviceToRenderModel[ unTrackedDevice ]->Draw( nEye, m_currentCommandBuffer.m_pCommandBuffer, m_pPipelineLayout, matMVP );
+		m_rTrackedDeviceToRenderModel[ unTrackedDevice ]->Draw( target, m_currentCommandBuffer.m_pCommandBuffer, m_pPipelineLayout, matMVP );
 	}
 }
 
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
-void CMainApplication::RenderCompanionWindow()
+void CMainApplication::RenderStereoCompanionWindow()
 {
 	// Get the next swapchain image
 	VkResult nResult = vkAcquireNextImageKHR( m_pDevice, m_pSwapchain, UINT64_MAX, m_pSwapchainSemaphores[ m_nFrameIndex ], VK_NULL_HANDLE, &m_nCurrentSwapchainImage );
@@ -3115,8 +3156,8 @@ void CMainApplication::RenderCompanionWindow()
 	vkCmdSetScissor( m_currentCommandBuffer.m_pCommandBuffer, 0, 1, &scissor );
 
 	// Bind the pipeline and descriptor set
-	vkCmdBindPipeline( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelines[ PSO_COMPANION ] );
-	vkCmdBindDescriptorSets( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelineLayout, 0, 1, &m_pDescriptorSets[ DESCRIPTOR_SET_COMPANION_LEFT_TEXTURE ], 0, nullptr );
+	vkCmdBindPipeline( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelines[ PSO_SCREEN ] );
+	vkCmdBindDescriptorSets( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelineLayout, 0, 1, &m_pDescriptorSets[ DESCRIPTOR_SET_SCREEN_TEXTURE ], 0, nullptr );
 
 	// Draw left eye texture to companion window
 	VkDeviceSize nOffsets[ 1 ] = { 0 };
@@ -3125,8 +3166,8 @@ void CMainApplication::RenderCompanionWindow()
 	vkCmdDrawIndexed( m_currentCommandBuffer.m_pCommandBuffer, m_uiCompanionWindowIndexSize / 2, 1, 0, 0, 0 );
 
 	// Draw right eye texture to companion window
-	vkCmdBindDescriptorSets( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelineLayout, 0, 1, &m_pDescriptorSets[ DESCRIPTOR_SET_COMPANION_RIGHT_TEXTURE ], 0, nullptr );
-	vkCmdDrawIndexed( m_currentCommandBuffer.m_pCommandBuffer, m_uiCompanionWindowIndexSize / 2, 1, ( m_uiCompanionWindowIndexSize / 2 ), 0, 0 );
+//	vkCmdBindDescriptorSets( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelineLayout, 0, 1, &m_pDescriptorSets[ DESCRIPTOR_SET_COMPANION_RIGHT_TEXTURE ], 0, nullptr );
+//	vkCmdDrawIndexed( m_currentCommandBuffer.m_pCommandBuffer, m_uiCompanionWindowIndexSize / 2, 1, ( m_uiCompanionWindowIndexSize / 2 ), 0, 0 );
 
 	// End the renderpass
 	vkCmdEndRenderPass( m_currentCommandBuffer.m_pCommandBuffer );
@@ -3139,41 +3180,143 @@ void CMainApplication::RenderCompanionWindow()
 	vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
 
 	// Transition both of the eye textures to VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL for SteamVR which requires this layout for submit
-	imageMemoryBarrier.image = m_leftEyeDesc.m_pImage;
+	imageMemoryBarrier.image = m_leftEyeBufferDesc.m_pImage;
 	imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
 	imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-	imageMemoryBarrier.oldLayout = m_leftEyeDesc.m_nImageLayout;
+	imageMemoryBarrier.oldLayout = m_leftEyeBufferDesc.m_nImageLayout;
 	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 	vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
-	m_leftEyeDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
+	m_leftEyeBufferDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
 
-	imageMemoryBarrier.image = m_rightEyeDesc.m_pImage;
-	vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
-	m_rightEyeDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
+//	imageMemoryBarrier.image = m_rightEyeBufferDesc.m_pImage;
+//	vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
+//	m_rightEyeBufferDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
+}
+
+void CMainApplication::RenderCompanionWindow()
+{
+    // TODO THIS NEEDS TO RENDER INTO THE SWAPCHAIN IMAGE DIRECTLY SOMEHOW
+//    // Get the next swapchain image
+//    VkResult nResult = vkAcquireNextImageKHR( m_pDevice, m_pSwapchain, UINT64_MAX, m_pSwapchainSemaphores[ m_nFrameIndex ], VK_NULL_HANDLE, &m_nCurrentSwapchainImage );
+//    if ( nResult != VK_SUCCESS )
+//    {
+//        dprintf( "Skipping companion window rendering, vkAcquireNextImageKHR returned %d\n", nResult );
+//        return;
+//    }
+
+    // Set viewport and scissor
+    VkViewport viewport = { 0.0f, 0.0f, (float ) m_nCompanionWindowWidth, ( float ) m_nCompanionWindowHeight, 0.0f, 1.0f };
+    vkCmdSetViewport( m_currentCommandBuffer.m_pCommandBuffer, 0, 1, &viewport );
+    VkRect2D scissor = { 0, 0, m_nCompanionWindowWidth, m_nCompanionWindowHeight };
+    vkCmdSetScissor( m_currentCommandBuffer.m_pCommandBuffer, 0, 1, &scissor );
+
+    // Transition the swapchain image to COLOR_ATTACHMENT_OPTIMAL for rendering
+    VkImageMemoryBarrier imageMemoryBarrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+    imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+    imageMemoryBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    imageMemoryBarrier.oldLayout = m_screenBufferDesc.m_nImageLayout;
+    imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    imageMemoryBarrier.image = m_screenBufferDesc.m_pImage;
+    imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
+    imageMemoryBarrier.subresourceRange.levelCount = 1;
+    imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
+    imageMemoryBarrier.subresourceRange.layerCount = 1;
+    imageMemoryBarrier.srcQueueFamilyIndex = m_nQueueFamilyIndex;
+    imageMemoryBarrier.dstQueueFamilyIndex = m_nQueueFamilyIndex;
+    vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
+    m_screenBufferDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
+
+    // Transition the depth buffer to VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL on first use
+    if (m_screenBufferDesc.m_nDepthStencilImageLayout == VK_IMAGE_LAYOUT_UNDEFINED )
+    {
+        imageMemoryBarrier.image = m_screenBufferDesc.m_pDepthStencilImage;
+        imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        imageMemoryBarrier.srcAccessMask = 0;
+        imageMemoryBarrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        imageMemoryBarrier.oldLayout = m_screenBufferDesc.m_nDepthStencilImageLayout;
+        imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
+        m_screenBufferDesc.m_nDepthStencilImageLayout = imageMemoryBarrier.newLayout;
+    }
+
+    // Start the renderpass
+    VkRenderPassBeginInfo renderPassBeginInfo = { VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
+    renderPassBeginInfo.renderPass = m_screenBufferDesc.m_pRenderPass;
+    renderPassBeginInfo.framebuffer = m_screenBufferDesc.m_pFramebuffer;
+    renderPassBeginInfo.renderArea.offset.x = 0;
+    renderPassBeginInfo.renderArea.offset.y = 0;
+    renderPassBeginInfo.renderArea.extent.width = m_nCompanionWindowWidth;
+    renderPassBeginInfo.renderArea.extent.height = m_nCompanionWindowHeight;
+    renderPassBeginInfo.clearValueCount = 2;
+    VkClearValue clearValues[ 2 ];
+    clearValues[ 0 ].color.float32[ 0 ] = 0.0f;
+    clearValues[ 0 ].color.float32[ 1 ] = 0.0f;
+    clearValues[ 0 ].color.float32[ 2 ] = 0.0f;
+    clearValues[ 0 ].color.float32[ 3 ] = 1.0f;
+    clearValues[ 1 ].depthStencil.depth = 1.0f;
+    clearValues[ 1 ].depthStencil.stencil = 0;
+//    renderPassBeginInfo.clearValueCount = _countof( clearValues );
+    renderPassBeginInfo.pClearValues = &clearValues[ 0 ];
+    vkCmdBeginRenderPass( m_currentCommandBuffer.m_pCommandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE );
+
+    RenderScene( RenderTarget::SCREEN );
+
+
+    // Bind the pipeline and descriptor set
+//    vkCmdBindPipeline( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelines[ PSO_SCREEN ] );
+//    vkCmdBindDescriptorSets(m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelineLayout, 0, 1, &m_pDescriptorSets[ DESCRIPTOR_SET_SCREEN_TEXTURE ], 0, nullptr );
+
+    // Draw left eye texture to companion window
+//    VkDeviceSize nOffsets[ 1 ] = { 0 };
+//    vkCmdBindVertexBuffers( m_currentCommandBuffer.m_pCommandBuffer, 0, 1, &m_pCompanionWindowVertexBuffer, &nOffsets[ 0 ] );
+//    vkCmdBindIndexBuffer( m_currentCommandBuffer.m_pCommandBuffer, m_pCompanionWindowIndexBuffer, 0, VK_INDEX_TYPE_UINT16 );
+//    vkCmdDrawIndexed( m_currentCommandBuffer.m_pCommandBuffer, m_uiCompanionWindowIndexSize, 1, 0, 0, 0 );
+
+    // Draw right eye texture to companion window
+//    vkCmdBindDescriptorSets( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelineLayout, 0, 1, &m_pDescriptorSets[ DESCRIPTOR_SET_COMPANION_RIGHT_TEXTURE ], 0, nullptr );
+//    vkCmdDrawIndexed( m_currentCommandBuffer.m_pCommandBuffer, m_uiCompanionWindowIndexSize / 2, 1, ( m_uiCompanionWindowIndexSize / 2 ), 0, 0 );
+
+    // End the renderpass
+    vkCmdEndRenderPass( m_currentCommandBuffer.m_pCommandBuffer );
+
+    // Transition the swapchain image to PRESENT_SRC for presentation
+//    imageMemoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+//    imageMemoryBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+//    imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+//    imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+//    vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
+
+    // Transition both of the eye textures to VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL for SteamVR which requires this layout for submit
+//    imageMemoryBarrier.image = m_leftEyeBufferDesc.m_pImage;
+//    imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+//    imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+//    imageMemoryBarrier.oldLayout = m_leftEyeBufferDesc.m_nImageLayout;
+//    imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+//    vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
+//    m_leftEyeBufferDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
+
+//    imageMemoryBarrier.image = m_rightEyeBufferDesc.m_pImage;
+//    vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
+//    m_rightEyeBufferDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: Gets a Matrix Projection Eye with respect to nEye.
 //-----------------------------------------------------------------------------
-Matrix4 CMainApplication::GetHMDMatrixProjectionEye( bool isVR,  vr::Hmd_Eye nEye )
+Matrix4 CMainApplication::GetHMDMatrixProjectionEye( vr::Hmd_Eye nEye )
 {
-    if (isVR) {
-        if ( !m_pHMD )
-            return Matrix4();
+    if ( !m_pHMD )
+        return Matrix4();
 
-        vr::HmdMatrix44_t mat = m_pHMD->GetProjectionMatrix( nEye, m_fNearClip, m_fFarClip );
+    vr::HmdMatrix44_t mat = m_pHMD->GetProjectionMatrix( nEye, m_fNearClip, m_fFarClip );
 
-        return Matrix4(
-                mat.m[0][0], mat.m[1][0], mat.m[2][0], mat.m[3][0],
-                mat.m[0][1], mat.m[1][1], mat.m[2][1], mat.m[3][1],
-                mat.m[0][2], mat.m[1][2], mat.m[2][2], mat.m[3][2],
-                mat.m[0][3], mat.m[1][3], mat.m[2][3], mat.m[3][3]
-        );
-    }
-    else{
-
-        return Matrix4().identity();
-    }
+    return Matrix4(
+            mat.m[0][0], mat.m[1][0], mat.m[2][0], mat.m[3][0],
+            mat.m[0][1], mat.m[1][1], mat.m[2][1], mat.m[3][1],
+            mat.m[0][2], mat.m[1][2], mat.m[2][2], mat.m[3][2],
+            mat.m[0][3], mat.m[1][3], mat.m[2][3], mat.m[3][3]
+    );
 }
 
 
@@ -3198,21 +3341,31 @@ Matrix4 CMainApplication::GetHMDMatrixPoseEye( vr::Hmd_Eye nEye )
 
 //-----------------------------------------------------------------------------
 // Purpose: Gets a Current View Projection Matrix with respect to nEye,
-//          which may be an Eye_Left or an Eye_Right.
+//          which may be an EYE_LEFT or an EYE_RIGHT.
 //-----------------------------------------------------------------------------
-Matrix4 CMainApplication::GetCurrentViewProjectionMatrix( vr::Hmd_Eye nEye )
+Matrix4 CMainApplication::GetCurrentViewProjectionMatrix( RenderTarget target )
 {
 	Matrix4 matMVP;
-	if( nEye == vr::Eye_Left )
+    if (target == RenderTarget::SCREEN)
+    {
+        matMVP = m_mat4ProjectionScreen * m_mat4ScreenPos;
+    }
+	if( target == RenderTarget::EYE_LEFT)
 	{
 		matMVP = m_mat4ProjectionLeft * m_mat4eyePosLeft * m_mat4HMDPose;
 	}
-	else if( nEye == vr::Eye_Right )
+	else if( target == RenderTarget::EYE_RIGHT )
 	{
 		matMVP = m_mat4ProjectionRight * m_mat4eyePosRight *  m_mat4HMDPose;
 	}
 
 	return matMVP;
+}
+
+Matrix4 CMainApplication::GetCurrentCameraViewProjectionMatrix( uint8_t cameraIndex )
+{
+    Matrix4 matMVP = m_mat4ProjectionScreen * m_mat4ScreenPos;
+    return matMVP;
 }
 
 //-----------------------------------------------------------------------------
@@ -3312,10 +3465,11 @@ VulkanRenderModel *CMainApplication::FindOrLoadRenderModel( vr::TrackedDeviceInd
 		}
 
 		pRenderModel = new VulkanRenderModel( pchRenderModelName );
-		VkDescriptorSet pDescriptorSets[ 2 ] =
+		VkDescriptorSet pDescriptorSets[ 3 ] =
 		{
 			m_pDescriptorSets[ DESCRIPTOR_SET_LEFT_EYE_RENDER_MODEL0 + unTrackedDeviceIndex ],
 			m_pDescriptorSets[ DESCRIPTOR_SET_RIGHT_EYE_RENDER_MODEL0 + unTrackedDeviceIndex ],
+			m_pDescriptorSets[ DESCRIPTOR_SET_SCREEN_RENDER_MODEL0 + unTrackedDeviceIndex ],
 		};
 
 		// If this gets called during HandleInput() there will be no command buffer current, so create one
@@ -3453,13 +3607,14 @@ VulkanRenderModel::~VulkanRenderModel()
 //-----------------------------------------------------------------------------
 // Purpose: Allocates and populates the Vulkan resources for a render model
 //-----------------------------------------------------------------------------
-bool VulkanRenderModel::BInit( VkDevice pDevice, const VkPhysicalDeviceMemoryProperties &memoryProperties, VkCommandBuffer pCommandBuffer, vr::TrackedDeviceIndex_t unTrackedDeviceIndex, VkDescriptorSet pDescriptorSets[ 2 ], const vr::RenderModel_t & vrModel, const vr::RenderModel_TextureMap_t & vrDiffuseTexture )
+bool VulkanRenderModel::BInit( VkDevice pDevice, const VkPhysicalDeviceMemoryProperties &memoryProperties, VkCommandBuffer pCommandBuffer, vr::TrackedDeviceIndex_t unTrackedDeviceIndex, VkDescriptorSet pDescriptorSets[ 3 ], const vr::RenderModel_t & vrModel, const vr::RenderModel_TextureMap_t & vrDiffuseTexture )
 {
 	m_pDevice = pDevice;
 	m_physicalDeviceMemoryProperties = memoryProperties;
 	m_unTrackedDeviceIndex = unTrackedDeviceIndex;
 	m_pDescriptorSets[ 0 ] = pDescriptorSets[ 0 ];
 	m_pDescriptorSets[ 1 ] = pDescriptorSets[ 1 ];
+	m_pDescriptorSets[ 2 ] = pDescriptorSets[ 2 ];
 
 	// Create and populate the vertex buffer
 	{
@@ -3631,28 +3786,28 @@ bool VulkanRenderModel::BInit( VkDevice pDevice, const VkPhysicalDeviceMemoryPro
 	}
 
 	// Create a constant buffer to hold the transform (one for each eye)
-	for ( uint32_t nEye = 0; nEye < 2; nEye++ )
+	for (uint32_t renderTarget = 0; renderTarget < RenderTarget::NUM_RENDER_TARGETS; renderTarget++ )
 	{
 		VkBufferCreateInfo bufferCreateInfo = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 		bufferCreateInfo.size = sizeof( Matrix4 );
 		bufferCreateInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-		vkCreateBuffer( m_pDevice, &bufferCreateInfo, nullptr, &m_pConstantBuffer[ nEye ] );
+		vkCreateBuffer( m_pDevice, &bufferCreateInfo, nullptr, &m_pConstantBuffer[ renderTarget ] );
 		
 		VkMemoryRequirements memoryRequirements = {};
-		vkGetBufferMemoryRequirements( m_pDevice, m_pConstantBuffer[ nEye ], &memoryRequirements );
+		vkGetBufferMemoryRequirements(m_pDevice, m_pConstantBuffer[ renderTarget ], &memoryRequirements );
 		VkMemoryAllocateInfo allocInfo = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
 		MemoryTypeFromProperties( m_physicalDeviceMemoryProperties, memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT, &allocInfo.memoryTypeIndex );
 		allocInfo.allocationSize = memoryRequirements.size;
 
-		vkAllocateMemory( m_pDevice, &allocInfo, nullptr, &m_pConstantBufferMemory[ nEye ] );
-		vkBindBufferMemory( m_pDevice, m_pConstantBuffer[ nEye ], m_pConstantBufferMemory[ nEye ], 0 );
+		vkAllocateMemory( m_pDevice, &allocInfo, nullptr, &m_pConstantBufferMemory[ renderTarget ] );
+		vkBindBufferMemory(m_pDevice, m_pConstantBuffer[ renderTarget ], m_pConstantBufferMemory[ renderTarget ], 0 );
 
 		// Map and keep mapped persistently
-		vkMapMemory( m_pDevice, m_pConstantBufferMemory[ nEye ], 0, VK_WHOLE_SIZE, 0, &m_pConstantBufferData[ nEye ] );
+		vkMapMemory(m_pDevice, m_pConstantBufferMemory[ renderTarget ], 0, VK_WHOLE_SIZE, 0, &m_pConstantBufferData[ renderTarget ] );
 
 		// Bake the descriptor set
 		VkDescriptorBufferInfo bufferInfo = {};
-		bufferInfo.buffer = m_pConstantBuffer[ nEye ];
+		bufferInfo.buffer = m_pConstantBuffer[ renderTarget ];
 		bufferInfo.offset = 0;
 		bufferInfo.range = VK_WHOLE_SIZE;
 
@@ -3665,19 +3820,19 @@ bool VulkanRenderModel::BInit( VkDevice pDevice, const VkPhysicalDeviceMemoryPro
 
 		VkWriteDescriptorSet writeDescriptorSets[ 3 ] = { };
 		writeDescriptorSets[ 0 ].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writeDescriptorSets[ 0 ].dstSet = m_pDescriptorSets[ nEye ];
+		writeDescriptorSets[ 0 ].dstSet = m_pDescriptorSets[ renderTarget ];
 		writeDescriptorSets[ 0 ].dstBinding = 0;
 		writeDescriptorSets[ 0 ].descriptorCount = 1;
 		writeDescriptorSets[ 0 ].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		writeDescriptorSets[ 0 ].pBufferInfo = &bufferInfo;
 		writeDescriptorSets[ 1 ].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writeDescriptorSets[ 1 ].dstSet = m_pDescriptorSets[ nEye ];
+		writeDescriptorSets[ 1 ].dstSet = m_pDescriptorSets[ renderTarget ];
 		writeDescriptorSets[ 1 ].dstBinding = 1;
 		writeDescriptorSets[ 1 ].descriptorCount = 1;
 		writeDescriptorSets[ 1 ].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 		writeDescriptorSets[ 1 ].pImageInfo = &imageInfo;
 		writeDescriptorSets[ 2 ].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writeDescriptorSets[ 2 ].dstSet = m_pDescriptorSets[ nEye ];
+		writeDescriptorSets[ 2 ].dstSet = m_pDescriptorSets[ renderTarget ];
 		writeDescriptorSets[ 2 ].dstBinding = 2;
 		writeDescriptorSets[ 2 ].descriptorCount = 1;
 		writeDescriptorSets[ 2 ].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
@@ -3775,13 +3930,13 @@ void VulkanRenderModel::Cleanup()
 //-----------------------------------------------------------------------------
 // Purpose: Draws the render model
 //-----------------------------------------------------------------------------
-void VulkanRenderModel::Draw( vr::EVREye nEye, VkCommandBuffer pCommandBuffer, VkPipelineLayout pPipelineLayout, const Matrix4 &matMVP )
+void VulkanRenderModel::Draw( RenderTarget target, VkCommandBuffer pCommandBuffer, VkPipelineLayout pPipelineLayout, const Matrix4 &matMVP )
 {
 	// Update the CB with the transform
-	memcpy( m_pConstantBufferData[ nEye ], &matMVP, sizeof( matMVP ) );
+	memcpy( m_pConstantBufferData[ target ], &matMVP, sizeof( matMVP ) );
 
 	// Bind the descriptor set
-	vkCmdBindDescriptorSets( pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pPipelineLayout, 0, 1, &m_pDescriptorSets[ nEye ], 0, nullptr );
+	vkCmdBindDescriptorSets( pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pPipelineLayout, 0, 1, &m_pDescriptorSets[ target ], 0, nullptr );
 	
 	// Bind the VB/IB and draw
 	VkDeviceSize nOffsets[ 1 ] = { 0 };

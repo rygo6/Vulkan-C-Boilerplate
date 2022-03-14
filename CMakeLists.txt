@@ -11,7 +11,6 @@ file(GLOB SRC_FILES
 
 add_executable(${TARGET_NAME}
         ${SRC_FILES}
-        src/main.cpp
         )
 
 target_link_directories(${TARGET_NAME} PUBLIC
