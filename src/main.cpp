@@ -54,8 +54,8 @@ enum DescriptorSetIndex_t
 {
 	DESCRIPTOR_SET_LEFT_EYE_SCENE = 0,
 	DESCRIPTOR_SET_RIGHT_EYE_SCENE,
+	DESCRIPTOR_SET_SCREEN_SCENE,
 	DESCRIPTOR_SET_SCREEN_TEXTURE,
-//	DESCRIPTOR_SET_COMPANION_RIGHT_TEXTURE,
 	DESCRIPTOR_SET_LEFT_EYE_RENDER_MODEL0,
 	DESCRIPTOR_SET_LEFT_EYE_RENDER_MODEL_MAX = DESCRIPTOR_SET_LEFT_EYE_RENDER_MODEL0 + vr::k_unMaxTrackedDeviceCount,
 	DESCRIPTOR_SET_RIGHT_EYE_RENDER_MODEL0,
@@ -155,7 +155,7 @@ public:
 
 	void RenderStereoTargets();
 	void RenderStereoCompanionWindow();
-    void RenderCompanionWindow();
+    void RenderScreen();
 	void RenderScene( RenderTarget target );
 
 	Matrix4 GetHMDMatrixProjectionEye( vr::Hmd_Eye nEye );
@@ -191,9 +191,9 @@ private:
 	bool m_rbShowTrackedDevice[ vr::k_unMaxTrackedDeviceCount ];
 
 private: // SDL bookkeeping
-	SDL_Window *m_pCompanionWindow;
-	uint32_t m_nCompanionWindowWidth;
-	uint32_t m_nCompanionWindowHeight;
+	SDL_Window *m_pScreenWindow;
+	uint32_t m_nScreenWindowWidth;
+	uint32_t m_nScreenWindowHeight;
 
 private:
 	int m_iTrackedControllerCount;
@@ -292,8 +292,6 @@ private:
 //	Matrix4 m_mat4ProjectionCenter;
 	Matrix4 m_mat4ProjectionLeft;
 	Matrix4 m_mat4ProjectionRight;
-
-    bool m_bRenderScreen;
 
     Matrix4 m_mat4ScreenPos;
     Matrix4 m_mat4ProjectionScreen;
@@ -485,9 +483,9 @@ static bool CreateVulkanBuffer( VkDevice pDevice, const VkPhysicalDeviceMemoryPr
 // Purpose: Constructor
 //-----------------------------------------------------------------------------
 CMainApplication::CMainApplication( int argc, char *argv[] )
-	: m_pCompanionWindow(NULL)
-	, m_nCompanionWindowWidth( 1280 )
-	, m_nCompanionWindowHeight( 720 )
+	: m_pScreenWindow(NULL)
+	, m_nScreenWindowWidth(1280 )
+	, m_nScreenWindowHeight(720 )
 	, m_pHMD( NULL )
 	, m_pRenderModels( NULL )
 	, m_bDebugVulkan( false )
@@ -541,8 +539,6 @@ CMainApplication::CMainApplication( int argc, char *argv[] )
 	memset( &m_pPipelines[ 0 ], 0, sizeof( m_pPipelines ) );
 	memset( m_pSceneConstantBufferData, 0, sizeof( m_pSceneConstantBufferData ) );
 	memset( m_pDescriptorSets, 0, sizeof( m_pDescriptorSets ) );
-
-    m_bRenderScreen = true;
 
 	for( int i = 1; i < argc; i++ )
 	{
@@ -648,8 +644,8 @@ bool CMainApplication::BInit()
 	int nWindowPosY = 100;
 	Uint32 unWindowFlags = SDL_WINDOW_SHOWN;
 
-	m_pCompanionWindow = SDL_CreateWindow( "hellovr [Vulkan]", nWindowPosX, nWindowPosY, m_nCompanionWindowWidth, m_nCompanionWindowHeight, unWindowFlags );
-	if (m_pCompanionWindow == NULL)
+    m_pScreenWindow = SDL_CreateWindow("hellovr [Vulkan]", nWindowPosX, nWindowPosY, m_nScreenWindowWidth, m_nScreenWindowHeight, unWindowFlags );
+	if (m_pScreenWindow == NULL)
 	{
 		dprintf( "%s - Window could not be created! SDL Error: %s\n", __FUNCTION__, SDL_GetError() );
 		return false;
@@ -662,7 +658,7 @@ bool CMainApplication::BInit()
 	m_strDisplay = GetTrackedDeviceString( m_pHMD, vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_SerialNumber_String );
 
 	std::string strWindowTitle = "hellovr [Vulkan] - " + m_strDriver + " " + m_strDisplay;
-	SDL_SetWindowTitle( m_pCompanionWindow, strWindowTitle.c_str() );
+	SDL_SetWindowTitle(m_pScreenWindow, strWindowTitle.c_str() );
 	
 	// cube array
 	m_iSceneVolumeWidth = m_iSceneVolumeInit;
@@ -1110,7 +1106,7 @@ bool CMainApplication::BInitVulkanSwapchain()
 	//----------------------//
 	SDL_SysWMinfo wmInfo;
 	SDL_VERSION( &wmInfo.version ); 
-	SDL_GetWindowWMInfo( m_pCompanionWindow, &wmInfo );
+	SDL_GetWindowWMInfo(m_pScreenWindow, &wmInfo );
 	VkResult nResult;
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 	VkWin32SurfaceCreateInfoKHR win32SurfaceCreateInfo = {};
@@ -1211,8 +1207,8 @@ bool CMainApplication::BInitVulkanSwapchain()
 	if ( surfaceCaps.currentExtent.width == -1 )
 	{
 		// If the surface size is undefined, the size is set to the size of the images requested.
-		swapChainExtent.width = m_nCompanionWindowWidth;
-		swapChainExtent.height = m_nCompanionWindowHeight;
+		swapChainExtent.width = m_nScreenWindowWidth;
+		swapChainExtent.height = m_nScreenWindowHeight;
 	}
 	else
 	{
@@ -1338,7 +1334,7 @@ bool CMainApplication::BInitVulkanSwapchain()
 	VkAttachmentReference attachmentReference;
 	attachmentReference.attachment = 0;
 	attachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-	
+
 	attachmentDesc.format = nSwapChainFormat;
 	attachmentDesc.samples = VK_SAMPLE_COUNT_1_BIT;
 	attachmentDesc.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -1401,8 +1397,8 @@ bool CMainApplication::BInitVulkanSwapchain()
 		framebufferCreateInfo.renderPass = m_pSwapchainRenderPass;
 		framebufferCreateInfo.attachmentCount = 1;
 		framebufferCreateInfo.pAttachments = &attachments[ 0 ];
-		framebufferCreateInfo.width = m_nCompanionWindowWidth;
-		framebufferCreateInfo.height = m_nCompanionWindowHeight;
+		framebufferCreateInfo.width = m_nScreenWindowWidth;
+		framebufferCreateInfo.height = m_nScreenWindowHeight;
 		framebufferCreateInfo.layers = 1;
 		VkFramebuffer pFramebuffer;
 		nResult = vkCreateFramebuffer( m_pDevice, &framebufferCreateInfo, NULL, &pFramebuffer );
@@ -1610,9 +1606,9 @@ void CMainApplication::Shutdown()
 		vkDestroyDevice( m_pDevice, nullptr );
 		vkDestroyInstance( m_pInstance, nullptr );
 	}
-	if( m_pCompanionWindow )
+	if( m_pScreenWindow )
 	{
-		SDL_DestroyWindow(m_pCompanionWindow);
+		SDL_DestroyWindow(m_pScreenWindow);
 	}
 
 	SDL_Quit();
@@ -1738,8 +1734,8 @@ void CMainApplication::RenderFrame()
 
 		UpdateControllerAxes();
 		RenderStereoTargets();
-//        RenderStereoCompanionWindow();
-        RenderCompanionWindow();
+        RenderScreen();
+        RenderStereoCompanionWindow();
 
 		// End the command buffer
 		vkEndCommandBuffer( m_currentCommandBuffer.m_pCommandBuffer );
@@ -2143,18 +2139,18 @@ void CMainApplication::CreateAllDescriptorSets()
 
 	// Companion window descriptor sets
 	{
-//		VkDescriptorImageInfo imageInfo = {};
-//		imageInfo.imageView = m_leftEyeBufferDesc.m_pImageView;
-//		imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-//
-//		VkWriteDescriptorSet writeDescriptorSets[ 1 ] = { };
-//		writeDescriptorSets[ 0 ].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-//		writeDescriptorSets[ 0 ].dstSet = m_pDescriptorSets[ DESCRIPTOR_SET_SCREEN_TEXTURE ];
-//		writeDescriptorSets[ 0 ].dstBinding = 1;
-//		writeDescriptorSets[ 0 ].descriptorCount = 1;
-//		writeDescriptorSets[ 0 ].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-//		writeDescriptorSets[ 0 ].pImageInfo = &imageInfo;
-//		vkUpdateDescriptorSets( m_pDevice, _countof( writeDescriptorSets ), writeDescriptorSets, 0, nullptr );
+		VkDescriptorImageInfo imageInfo = {};
+		imageInfo.imageView = m_screenBufferDesc.m_pImageView;
+		imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+		VkWriteDescriptorSet writeDescriptorSets[ 1 ] = { };
+		writeDescriptorSets[ 0 ].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		writeDescriptorSets[ 0 ].dstSet = m_pDescriptorSets[ DESCRIPTOR_SET_SCREEN_TEXTURE ];
+		writeDescriptorSets[ 0 ].dstBinding = 1;
+		writeDescriptorSets[ 0 ].descriptorCount = 1;
+		writeDescriptorSets[ 0 ].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+		writeDescriptorSets[ 0 ].pImageInfo = &imageInfo;
+		vkUpdateDescriptorSets( m_pDevice, _countof( writeDescriptorSets ), writeDescriptorSets, 0, nullptr );
 
 //		imageInfo.imageView = m_rightEyeBufferDesc.m_pImageView;
 //		writeDescriptorSets[ 0 ].dstSet = m_pDescriptorSets[ DESCRIPTOR_SET_COMPANION_RIGHT_TEXTURE ];
@@ -2875,8 +2871,8 @@ void CMainApplication::SetupScreenWindow()
 
 //    m_nHMDRenderWidth = ( uint32_t )(m_flSuperSampleScale * ( float ) m_nHMDRenderWidth );
 //    m_nHMDRenderHeight = ( uint32_t )(m_flSuperSampleScale * ( float ) m_nHMDRenderHeight );
-    m_nScreenRenderWidth = ( uint32_t )m_nCompanionWindowWidth;
-    m_nScreenRenderHeight = ( uint32_t )m_nCompanionWindowHeight;
+    m_nScreenRenderWidth = ( uint32_t )m_nScreenWindowWidth;
+    m_nScreenRenderHeight = ( uint32_t )m_nScreenWindowHeight;
 
     CreateFrameBuffer(m_nScreenRenderWidth, m_nScreenRenderHeight, m_screenBufferDesc );
 
@@ -2930,7 +2926,6 @@ void CMainApplication::SetupScreenWindow()
 //-----------------------------------------------------------------------------
 void CMainApplication::RenderStereoTargets()
 {
-
 	// Set viewport and scissor
 	VkViewport viewport = {0.0f, 0.0f, (float ) m_nHMDRenderWidth, ( float ) m_nHMDRenderHeight, 0.0f, 1.0f };
 	vkCmdSetViewport( m_currentCommandBuffer.m_pCommandBuffer, 0, 1, &viewport );
@@ -2995,14 +2990,14 @@ void CMainApplication::RenderStereoTargets()
 	vkCmdEndRenderPass( m_currentCommandBuffer.m_pCommandBuffer );
 	
 	// Transition eye image to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL for display on the companion window
-	imageMemoryBarrier.image = m_leftEyeBufferDesc.m_pImage;
-	imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	imageMemoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-	imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-	imageMemoryBarrier.oldLayout = m_leftEyeBufferDesc.m_nImageLayout;
-	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
-    m_leftEyeBufferDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
+//	imageMemoryBarrier.image = m_leftEyeBufferDesc.m_pImage;
+//	imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+//	imageMemoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+//	imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+//	imageMemoryBarrier.oldLayout = m_leftEyeBufferDesc.m_nImageLayout;
+//	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+//	vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
+//    m_leftEyeBufferDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
 
 	//-----------//
 	// Right Eye //
@@ -3041,15 +3036,17 @@ void CMainApplication::RenderStereoTargets()
 	vkCmdEndRenderPass( m_currentCommandBuffer.m_pCommandBuffer );
 	
 	// Transition eye image to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL for display on the companion window
-	imageMemoryBarrier.image = m_rightEyeBufferDesc.m_pImage;
-	imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	imageMemoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-	imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-	imageMemoryBarrier.oldLayout = m_rightEyeBufferDesc.m_nImageLayout;
-	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
-    m_rightEyeBufferDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
+//	imageMemoryBarrier.image = m_rightEyeBufferDesc.m_pImage;
+//	imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+//	imageMemoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+//	imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+//	imageMemoryBarrier.oldLayout = m_rightEyeBufferDesc.m_nImageLayout;
+//	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+//	vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
+//    m_rightEyeBufferDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
 }
+
+
 
 //-----------------------------------------------------------------------------
 // Purpose: Renders a scene with respect to nEye.
@@ -3138,8 +3135,8 @@ void CMainApplication::RenderStereoCompanionWindow()
 	renderPassBeginInfo.framebuffer = m_pSwapchainFramebuffers[ m_nCurrentSwapchainImage ];
 	renderPassBeginInfo.renderArea.offset.x = 0;
 	renderPassBeginInfo.renderArea.offset.y = 0;
-	renderPassBeginInfo.renderArea.extent.width = m_nCompanionWindowWidth;
-	renderPassBeginInfo.renderArea.extent.height = m_nCompanionWindowHeight;
+	renderPassBeginInfo.renderArea.extent.width = m_nScreenWindowWidth;
+	renderPassBeginInfo.renderArea.extent.height = m_nScreenWindowHeight;
 	VkClearValue clearValues[ 1 ];
 	clearValues[ 0 ].color.float32[ 0 ] = 0.0f;
 	clearValues[ 0 ].color.float32[ 1 ] = 0.0f;
@@ -3150,9 +3147,9 @@ void CMainApplication::RenderStereoCompanionWindow()
 	vkCmdBeginRenderPass( m_currentCommandBuffer.m_pCommandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE );
 
 	// Set viewport/scissor
-	VkViewport viewport = { 0.0f, 0.0f, (float ) m_nCompanionWindowWidth, ( float ) m_nCompanionWindowHeight, 0.0f, 1.0f };
+	VkViewport viewport = {0.0f, 0.0f, (float ) m_nScreenWindowWidth, ( float ) m_nScreenWindowHeight, 0.0f, 1.0f };
 	vkCmdSetViewport( m_currentCommandBuffer.m_pCommandBuffer, 0, 1, &viewport );
-	VkRect2D scissor = { 0, 0, m_nCompanionWindowWidth, m_nCompanionWindowHeight };
+	VkRect2D scissor = {0, 0, m_nScreenWindowWidth, m_nScreenWindowHeight };
 	vkCmdSetScissor( m_currentCommandBuffer.m_pCommandBuffer, 0, 1, &scissor );
 
 	// Bind the pipeline and descriptor set
@@ -3180,37 +3177,28 @@ void CMainApplication::RenderStereoCompanionWindow()
 	vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
 
 	// Transition both of the eye textures to VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL for SteamVR which requires this layout for submit
-	imageMemoryBarrier.image = m_leftEyeBufferDesc.m_pImage;
-	imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-	imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-	imageMemoryBarrier.oldLayout = m_leftEyeBufferDesc.m_nImageLayout;
-	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-	vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
-	m_leftEyeBufferDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
+//	imageMemoryBarrier.image = m_leftEyeBufferDesc.m_pImage;
+//	imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+//	imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+//	imageMemoryBarrier.oldLayout = m_leftEyeBufferDesc.m_nImageLayout;
+//	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+//	vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
+//	m_leftEyeBufferDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
 
 //	imageMemoryBarrier.image = m_rightEyeBufferDesc.m_pImage;
 //	vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
 //	m_rightEyeBufferDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
 }
 
-void CMainApplication::RenderCompanionWindow()
+void CMainApplication::RenderScreen()
 {
-    // TODO THIS NEEDS TO RENDER INTO THE SWAPCHAIN IMAGE DIRECTLY SOMEHOW
-//    // Get the next swapchain image
-//    VkResult nResult = vkAcquireNextImageKHR( m_pDevice, m_pSwapchain, UINT64_MAX, m_pSwapchainSemaphores[ m_nFrameIndex ], VK_NULL_HANDLE, &m_nCurrentSwapchainImage );
-//    if ( nResult != VK_SUCCESS )
-//    {
-//        dprintf( "Skipping companion window rendering, vkAcquireNextImageKHR returned %d\n", nResult );
-//        return;
-//    }
-
     // Set viewport and scissor
-    VkViewport viewport = { 0.0f, 0.0f, (float ) m_nCompanionWindowWidth, ( float ) m_nCompanionWindowHeight, 0.0f, 1.0f };
-    vkCmdSetViewport( m_currentCommandBuffer.m_pCommandBuffer, 0, 1, &viewport );
-    VkRect2D scissor = { 0, 0, m_nCompanionWindowWidth, m_nCompanionWindowHeight };
-    vkCmdSetScissor( m_currentCommandBuffer.m_pCommandBuffer, 0, 1, &scissor );
+    VkViewport screenViewport = {0.0f, 0.0f, (float ) m_nScreenRenderWidth, ( float ) m_nScreenRenderHeight, 0.0f, 1.0f };
+    vkCmdSetViewport( m_currentCommandBuffer.m_pCommandBuffer, 0, 1, &screenViewport );
+    VkRect2D screenScissor = {0, 0, m_nScreenRenderWidth, m_nScreenRenderHeight };
+    vkCmdSetScissor( m_currentCommandBuffer.m_pCommandBuffer, 0, 1, &screenScissor );
 
-    // Transition the swapchain image to COLOR_ATTACHMENT_OPTIMAL for rendering
+    // Transition to VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     VkImageMemoryBarrier imageMemoryBarrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
     imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
     imageMemoryBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
@@ -3246,8 +3234,8 @@ void CMainApplication::RenderCompanionWindow()
     renderPassBeginInfo.framebuffer = m_screenBufferDesc.m_pFramebuffer;
     renderPassBeginInfo.renderArea.offset.x = 0;
     renderPassBeginInfo.renderArea.offset.y = 0;
-    renderPassBeginInfo.renderArea.extent.width = m_nCompanionWindowWidth;
-    renderPassBeginInfo.renderArea.extent.height = m_nCompanionWindowHeight;
+    renderPassBeginInfo.renderArea.extent.width = m_nScreenRenderWidth;
+    renderPassBeginInfo.renderArea.extent.height = m_nScreenRenderHeight;
     renderPassBeginInfo.clearValueCount = 2;
     VkClearValue clearValues[ 2 ];
     clearValues[ 0 ].color.float32[ 0 ] = 0.0f;
@@ -3262,43 +3250,17 @@ void CMainApplication::RenderCompanionWindow()
 
     RenderScene( RenderTarget::SCREEN );
 
-
-    // Bind the pipeline and descriptor set
-//    vkCmdBindPipeline( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelines[ PSO_SCREEN ] );
-//    vkCmdBindDescriptorSets(m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelineLayout, 0, 1, &m_pDescriptorSets[ DESCRIPTOR_SET_SCREEN_TEXTURE ], 0, nullptr );
-
-    // Draw left eye texture to companion window
-//    VkDeviceSize nOffsets[ 1 ] = { 0 };
-//    vkCmdBindVertexBuffers( m_currentCommandBuffer.m_pCommandBuffer, 0, 1, &m_pCompanionWindowVertexBuffer, &nOffsets[ 0 ] );
-//    vkCmdBindIndexBuffer( m_currentCommandBuffer.m_pCommandBuffer, m_pCompanionWindowIndexBuffer, 0, VK_INDEX_TYPE_UINT16 );
-//    vkCmdDrawIndexed( m_currentCommandBuffer.m_pCommandBuffer, m_uiCompanionWindowIndexSize, 1, 0, 0, 0 );
-
-    // Draw right eye texture to companion window
-//    vkCmdBindDescriptorSets( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelineLayout, 0, 1, &m_pDescriptorSets[ DESCRIPTOR_SET_COMPANION_RIGHT_TEXTURE ], 0, nullptr );
-//    vkCmdDrawIndexed( m_currentCommandBuffer.m_pCommandBuffer, m_uiCompanionWindowIndexSize / 2, 1, ( m_uiCompanionWindowIndexSize / 2 ), 0, 0 );
-
-    // End the renderpass
     vkCmdEndRenderPass( m_currentCommandBuffer.m_pCommandBuffer );
 
-    // Transition the swapchain image to PRESENT_SRC for presentation
-//    imageMemoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-//    imageMemoryBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-//    imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-//    imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-//    vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
-
-    // Transition both of the eye textures to VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL for SteamVR which requires this layout for submit
-//    imageMemoryBarrier.image = m_leftEyeBufferDesc.m_pImage;
-//    imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-//    imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-//    imageMemoryBarrier.oldLayout = m_leftEyeBufferDesc.m_nImageLayout;
-//    imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-//    vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
-//    m_leftEyeBufferDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
-
-//    imageMemoryBarrier.image = m_rightEyeBufferDesc.m_pImage;
-//    vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
-//    m_rightEyeBufferDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
+    // Transition eye image to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL for display on the companion window
+    imageMemoryBarrier.image = m_screenBufferDesc.m_pImage;
+    imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    imageMemoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    imageMemoryBarrier.oldLayout = m_screenBufferDesc.m_nImageLayout;
+    imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    vkCmdPipelineBarrier( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &imageMemoryBarrier );
+    m_screenBufferDesc.m_nImageLayout = imageMemoryBarrier.newLayout;
 }
 
 //-----------------------------------------------------------------------------
