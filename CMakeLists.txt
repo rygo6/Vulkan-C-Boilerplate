@@ -11,10 +11,9 @@ file(GLOB SRC_FILES
 
 add_executable(${TARGET_NAME}
         ${SRC_FILES}
-        )
+        src/vulkan_render_model.h src/vulkan_render_model.cpp src/vulkan_utility.h)
 
 target_link_directories(${TARGET_NAME} PUBLIC
-        thirdparty/sdl2-2.0.3/bin/win64
         thirdparty/sdl2-2.0.3/bin/win64
         thirdparty/vulkan-1.0.49.0/lib/win64
         thirdparty/openvr/lib/win64
