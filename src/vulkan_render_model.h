@@ -12,9 +12,16 @@ public:
     VulkanRenderModel( const std::string & sRenderModelName );
     ~VulkanRenderModel();
 
-    bool BInit( VkDevice pDevice, const VkPhysicalDeviceMemoryProperties &memoryProperties, VkCommandBuffer pCommandBuffer, vr::TrackedDeviceIndex_t unTrackedDeviceIndex, VkDescriptorSet pDescriptorSets[ 2 ], const vr::RenderModel_t & vrModel, const vr::RenderModel_TextureMap_t & vrDiffuseTexture );
+    bool BInit(VkDevice pDevice,
+               const VkPhysicalDeviceMemoryProperties &memoryProperties,
+               VkCommandBuffer pCommandBuffer,
+               vr::TrackedDeviceIndex_t unTrackedDeviceIndex,
+               VkDescriptorSet pDescriptorSets[3],
+               const vr::RenderModel_t &vrModel,
+               const vr::RenderModel_TextureMap_t &vrDiffuseTexture);
     void Cleanup();
     void Draw( RenderTarget target, VkCommandBuffer pCommandBuffer, VkPipelineLayout pPipelineLayout, const Matrix4 &matMVP );
+
     const std::string & GetName() const { return m_sModelName; }
 
 private:

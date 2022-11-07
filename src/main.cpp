@@ -9,8 +9,8 @@
 
 #include "vulkan_utility.h"
 #include "vulkan_render_model.h"
+#include "vulkan_pipeline_state_object.h"
 
-//#include <vulkan/vulkan.h>
 #include <SDL.h>
 #include <SDL_syswm.h>
 #include <stdio.h>
@@ -56,12 +56,13 @@ public:
 	CMainApplication( int argc, char *argv[] );
 	virtual ~CMainApplication();
 
-	bool BInit();
+    bool BInit();
+	bool BInitSDL();
+	bool BInitOVR();
 	bool BInitVulkan();
 	bool BInitVulkanInstance();
 	bool BInitVulkanDevice();
 	bool BInitVulkanSwapchain();
-	bool BInitCompositor();
 	bool GetVulkanInstanceExtensionsRequired( std::vector< std::string > &outInstanceExtensionList );
 	bool GetVulkanDeviceExtensionsRequired( VkPhysicalDevice pPhysicalDevice, std::vector< std::string > &outDeviceExtensionList );
 
@@ -109,14 +110,11 @@ public:
 
 private: 
 	bool m_bDebugVulkan;
-	bool m_bVerbose;
-	bool m_bPerf;
-	bool m_bVblank;
 	int m_nMSAASampleCount;
 	// Optional scaling factor to render with supersampling (defaults off, use -scale)
 	float m_flSuperSampleScale;
 
-	vr::IVRSystem *m_pHMD;
+	vr::IVRSystem *m_vrSystem;
 	vr::IVRRenderModels *m_pRenderModels;
 	std::string m_strDriver;
 	std::string m_strDisplay;
@@ -170,7 +168,6 @@ private:
 	std::vector< VkFramebuffer > m_pSwapchainFramebuffers;
 	std::vector< VkSemaphore > m_pSwapchainSemaphores;
 	VkRenderPass m_pSwapchainRenderPass;
-	
 
 	VkCommandPool m_pCommandPool;
 	VkDescriptorPool m_pDescriptorPool;
@@ -201,8 +198,10 @@ private:
 	VkSampler m_pSceneSampler;
 
 	// Storage for VS and PS for each PSO
-	VkShaderModule m_pShaderModules[ PSO_COUNT * 2 ];
-	VkPipeline m_pPipelines[ PSO_COUNT ];
+//	VkShaderModule m_pShaderModules[ PSO_COUNT * 2 ];
+//	VkPipeline m_pPipelines[ PSO_COUNT ];
+    VulkanPipelineStateObject *m_pPipelineStateObjects[ PSO_COUNT ];
+
 	VkDescriptorSetLayout m_pDescriptorSetLayout;
 	VkPipelineLayout m_pPipelineLayout;
 	VkPipelineCache m_pPipelineCache;
@@ -223,43 +222,14 @@ private:
 	Matrix4 m_mat4eyePosLeft;
 	Matrix4 m_mat4eyePosRight;
 
-//	Matrix4 m_mat4ProjectionCenter;
 	Matrix4 m_mat4ProjectionLeft;
 	Matrix4 m_mat4ProjectionRight;
 
     Matrix4 m_mat4ScreenPos;
     Matrix4 m_mat4ProjectionScreen;
 
-	struct VertexDataScene
-	{
-		Vector3 position;
-		Vector2 texCoord;
-	};
-
-	struct VertexDataWindow
-	{
-		Vector2 position;
-		Vector2 texCoord;
-
-		VertexDataWindow( const Vector2 & pos, const Vector2 tex ) :  position(pos), texCoord(tex) {	}
-	};
-
-	struct FramebufferDesc
-	{
-		VkImage m_pImage;
-		VkImageLayout m_nImageLayout;
-		VkDeviceMemory m_pDeviceMemory;
-		VkImageView m_pImageView;
-		VkImage m_pDepthStencilImage;
-		VkImageLayout m_nDepthStencilImageLayout;
-		VkDeviceMemory m_pDepthStencilDeviceMemory;
-		VkImageView m_pDepthStencilImageView;
-		VkRenderPass m_pRenderPass;
-		VkFramebuffer m_pFramebuffer;
-	};
 	FramebufferDesc m_leftEyeBufferDesc;
 	FramebufferDesc m_rightEyeBufferDesc;
-
     FramebufferDesc m_screenBufferDesc;
 
 	bool CreateFrameBuffer( int nWidth, int nHeight, FramebufferDesc &framebufferDesc );
@@ -314,12 +284,9 @@ CMainApplication::CMainApplication( int argc, char *argv[] )
 	: m_pScreenWindow(NULL)
 	, m_nScreenWindowWidth(1280 )
 	, m_nScreenWindowHeight(720 )
-	, m_pHMD( NULL )
+	, m_vrSystem(NULL )
 	, m_pRenderModels( NULL )
-	, m_bDebugVulkan( false )
-	, m_bVerbose( false )
-	, m_bPerf( false )
-	, m_bVblank( false )
+	, m_bDebugVulkan( true )
 	, m_nMSAASampleCount( 4 )
 	, m_flSuperSampleScale( 1.0f )
 	, m_iTrackedControllerCount( 0 )
@@ -358,13 +325,15 @@ CMainApplication::CMainApplication( int argc, char *argv[] )
 	, m_pCompanionWindowIndexBuffer( VK_NULL_HANDLE )
 	, m_pCompanionWindowIndexBufferMemory( VK_NULL_HANDLE )
 	, m_pControllerAxesVertexBuffer( VK_NULL_HANDLE )
-	, m_pControllerAxesVertexBufferMemory( VK_NULL_HANDLE )
-{
+	, m_pControllerAxesVertexBufferMemory( VK_NULL_HANDLE ) {
+
 	memset(&m_leftEyeBufferDesc, 0, sizeof( m_leftEyeBufferDesc ) );
 	memset(&m_rightEyeBufferDesc, 0, sizeof( m_rightEyeBufferDesc ) );
 	memset(&m_screenBufferDesc, 0, sizeof( m_screenBufferDesc ) );
-	memset( &m_pShaderModules[ 0 ], 0, sizeof( m_pShaderModules ) );
-	memset( &m_pPipelines[ 0 ], 0, sizeof( m_pPipelines ) );
+//	memset( &m_pShaderModules[ 0 ], 0, sizeof( m_pShaderModules ) );
+//	memset( &m_pPipelines[ 0 ], 0, sizeof( m_pPipelines ) );
+//	memset(m_pPipelineStateObjects, 0, sizeof( m_pPipelineStateObjects ) );
+	memset(&m_pPipelineStateObjects[0], 0, sizeof( m_pPipelineStateObjects ) );
 	memset( m_pSceneConstantBufferData, 0, sizeof( m_pSceneConstantBufferData ) );
 	memset( m_pDescriptorSets, 0, sizeof( m_pDescriptorSets ) );
 
@@ -373,14 +342,6 @@ CMainApplication::CMainApplication( int argc, char *argv[] )
 		if( !stricmp( argv[i], "-vulkandebug" ) )
 		{
 			m_bDebugVulkan = true;
-		}
-		else if( !stricmp( argv[i], "-verbose" ) )
-		{
-			m_bVerbose = true;
-		}
-		else if( !stricmp( argv[i], "-novblank" ) )
-		{
-			m_bVblank = false;
 		}
 		else if ( !stricmp( argv[i], "-msaa" ) && ( argc > i + 1 ) && ( *argv[ i + 1 ] != '-' ) )
 		{
@@ -432,24 +393,74 @@ std::string GetTrackedDeviceString( vr::IVRSystem *pHmd, vr::TrackedDeviceIndex_
 	return sResult;
 }
 
+bool CMainApplication::BInit()
+{
+    // cube array
+    m_iSceneVolumeWidth = m_iSceneVolumeInit;
+    m_iSceneVolumeHeight = m_iSceneVolumeInit;
+    m_iSceneVolumeDepth = m_iSceneVolumeInit;
+
+    m_fNearClip = 0.1f;
+    m_fFarClip = 30.0f;
+
+    m_uiVertcount = 0;
+    m_uiCompanionWindowIndexSize = 0;
+
+    if ( !BInitSDL() )
+    {
+        dprintf( "%s - Unable to initialize Vulkan!\n", __FUNCTION__ );
+        return false;
+    }
+
+    if ( !BInitOVR() )
+    {
+        dprintf( "%s - Unable to initialize Vulkan!\n", __FUNCTION__ );
+        return false;
+    }
+
+    if ( !BInitVulkan() )
+    {
+        dprintf( "%s - Unable to initialize Vulkan!\n", __FUNCTION__ );
+        return false;
+    }
+
+    return true;
+}
+
+bool CMainApplication::BInitSDL()
+{
+    if ( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_TIMER ) < 0 )
+    {
+        dprintf("%s - SDL could not initialize! SDL Error: %s\n", __FUNCTION__, SDL_GetError());
+        return false;
+    }
+
+    int nWindowPosX = 700;
+    int nWindowPosY = 100;
+    Uint32 unWindowFlags = SDL_WINDOW_SHOWN;
+
+    m_pScreenWindow = SDL_CreateWindow("hellovr [Vulkan]", nWindowPosX, nWindowPosY, m_nScreenWindowWidth, m_nScreenWindowHeight, unWindowFlags );
+    if (m_pScreenWindow == NULL)
+    {
+        dprintf( "%s - Window could not be created! SDL Error: %s\n", __FUNCTION__, SDL_GetError() );
+        return false;
+    }
+//    std::string strWindowTitle = "hellovr [Vulkan] - " + m_strDriver + " " + m_strDisplay;
+//    SDL_SetWindowTitle(m_pScreenWindow, strWindowTitle.c_str() );
+}
+
 //-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
-bool CMainApplication::BInit()
+bool CMainApplication::BInitOVR()
 {
-	if ( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_TIMER ) < 0 )
-	{
-		dprintf("%s - SDL could not initialize! SDL Error: %s\n", __FUNCTION__, SDL_GetError());
-		return false;
-	}
-
 	// Loading the SteamVR Runtime
 	vr::EVRInitError eError = vr::VRInitError_None;
-	m_pHMD = vr::VR_Init( &eError, vr::VRApplication_Scene );
+    m_vrSystem = vr::VR_Init(&eError, vr::VRApplication_Scene );
 
 	if ( eError != vr::VRInitError_None )
 	{
-		m_pHMD = NULL;
+        m_vrSystem = NULL;
 		char buf[1024];
 		sprintf_s( buf, sizeof( buf ), "Unable to init VR runtime: %s", vr::VR_GetVRInitErrorAsEnglishDescription( eError ) );
 		SDL_ShowSimpleMessageBox( SDL_MESSAGEBOX_ERROR, "VR_Init Failed", buf, NULL );
@@ -459,7 +470,7 @@ bool CMainApplication::BInit()
 	m_pRenderModels = (vr::IVRRenderModels *)vr::VR_GetGenericInterface( vr::IVRRenderModels_Version, &eError );
 	if( !m_pRenderModels )
 	{
-		m_pHMD = NULL;
+        m_vrSystem = NULL;
 		vr::VR_Shutdown();
 
 		char buf[1024];
@@ -468,48 +479,19 @@ bool CMainApplication::BInit()
 		return false;
 	}
 
-	int nWindowPosX = 700;
-	int nWindowPosY = 100;
-	Uint32 unWindowFlags = SDL_WINDOW_SHOWN;
-
-    m_pScreenWindow = SDL_CreateWindow("hellovr [Vulkan]", nWindowPosX, nWindowPosY, m_nScreenWindowWidth, m_nScreenWindowHeight, unWindowFlags );
-	if (m_pScreenWindow == NULL)
-	{
-		dprintf( "%s - Window could not be created! SDL Error: %s\n", __FUNCTION__, SDL_GetError() );
-		return false;
-	}
-
 	m_strDriver = "No Driver";
 	m_strDisplay = "No Display";
 
-	m_strDriver = GetTrackedDeviceString( m_pHMD, vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_TrackingSystemName_String );
-	m_strDisplay = GetTrackedDeviceString( m_pHMD, vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_SerialNumber_String );
+	m_strDriver = GetTrackedDeviceString(m_vrSystem, vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_TrackingSystemName_String );
+	m_strDisplay = GetTrackedDeviceString(m_vrSystem, vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_SerialNumber_String );
 
-	std::string strWindowTitle = "hellovr [Vulkan] - " + m_strDriver + " " + m_strDisplay;
-	SDL_SetWindowTitle(m_pScreenWindow, strWindowTitle.c_str() );
-	
-	// cube array
-	m_iSceneVolumeWidth = m_iSceneVolumeInit;
-	m_iSceneVolumeHeight = m_iSceneVolumeInit;
-	m_iSceneVolumeDepth = m_iSceneVolumeInit;
- 
-	m_fNearClip = 0.1f;
-	m_fFarClip = 30.0f;
+    vr::EVRInitError peError = vr::VRInitError_None;
 
-	m_uiVertcount = 0;
-	m_uiCompanionWindowIndexSize = 0;
-
-	if ( !BInitVulkan() )
-	{
-		dprintf( "%s - Unable to initialize Vulkan!\n", __FUNCTION__ );
-		return false;
-	}
-
-	if ( !BInitCompositor() )
-	{
-		dprintf( "%s - Failed to initialize VR Compositor!\n", __FUNCTION__ );
-		return false;
-	}
+    if ( !vr::VRCompositor() )
+    {
+        dprintf( "Compositor initialization failed. See log file for details\n" );
+        return false;
+    }
 
 	return true;
 }
@@ -795,7 +777,7 @@ bool CMainApplication::BInitVulkanDevice()
 
 	// Query OpenVR for the physical device to use
 	uint64_t pHMDPhysicalDevice = 0;
-	m_pHMD->GetOutputDevice( &pHMDPhysicalDevice, vr::TextureType_Vulkan, ( VkInstance_T * ) m_pInstance );
+	m_vrSystem->GetOutputDevice(&pHMDPhysicalDevice, vr::TextureType_Vulkan, ( VkInstance_T * ) m_pInstance );
 
 	// Select the HMD physical device
 	m_pPhysicalDevice = VK_NULL_HANDLE;
@@ -1315,24 +1297,6 @@ bool CMainApplication::BInitVulkan()
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: Initialize Compositor. Returns true if the compositor was
-//          successfully initialized, false otherwise.
-//-----------------------------------------------------------------------------
-bool CMainApplication::BInitCompositor()
-{
-	vr::EVRInitError peError = vr::VRInitError_None;
-
-	if ( !vr::VRCompositor() )
-	{
-		dprintf( "Compositor initialization failed. See log file for details\n" );
-		return false;
-	}
-
-	return true;
-}
-
-
-//-----------------------------------------------------------------------------
 // Purpose:
 //-----------------------------------------------------------------------------
 void CMainApplication::Shutdown()
@@ -1343,10 +1307,10 @@ void CMainApplication::Shutdown()
 		vkDeviceWaitIdle( m_pDevice );
 	}
 
-	if( m_pHMD )
+	if( m_vrSystem )
 	{
 		vr::VR_Shutdown();
-		m_pHMD = NULL;
+        m_vrSystem = NULL;
 	}
 
 	for( std::vector< VulkanRenderModel * >::iterator i = m_vecRenderModels.begin(); i != m_vecRenderModels.end(); i++ )
@@ -1406,14 +1370,21 @@ void CMainApplication::Shutdown()
 
 		vkDestroyPipelineLayout( m_pDevice, m_pPipelineLayout, nullptr );
 		vkDestroyDescriptorSetLayout( m_pDevice, m_pDescriptorSetLayout, nullptr );
-		for ( uint32_t nPSO = 0; nPSO < PSO_COUNT; nPSO++ )
+
+        for ( uint32_t nPSO = 0; nPSO < PSO_COUNT; nPSO++ )
 		{
-			vkDestroyPipeline( m_pDevice, m_pPipelines[ nPSO ], nullptr );
+           delete m_pPipelineStateObjects[nPSO];
 		}
-		for ( uint32_t nShader = 0; nShader < _countof( m_pShaderModules); nShader++ )
-		{
-			vkDestroyShaderModule( m_pDevice, m_pShaderModules[ nShader ], nullptr );
-		}
+
+//		for ( uint32_t nPSO = 0; nPSO < PSO_COUNT; nPSO++ )
+//		{
+//			vkDestroyPipeline( m_pDevice, m_pPipelines[ nPSO ], nullptr );
+//		}
+//		for ( uint32_t nShader = 0; nShader < _countof( m_pShaderModules); nShader++ )
+//		{
+//			vkDestroyShaderModule( m_pDevice, m_pShaderModules[ nShader ], nullptr );
+//		}
+
 		vkDestroyPipelineCache( m_pDevice, m_pPipelineCache, nullptr );
 
 		if ( m_pDebugReportCallback != VK_NULL_HANDLE )
@@ -1470,19 +1441,15 @@ bool CMainApplication::HandleInput()
 		}
         else if ( sdlEvent.type == SDL_MOUSEMOTION )
         {
-            dprintf( "Mouse Move %i %i\n", sdlEvent.motion.xrel, sdlEvent.motion.yrel );
-//            m_mat4HMDPose = m_mat4HMDPose.rotateY(sdlEvent.motion.xrel);
-//            m_mat4HMDPose = m_mat4HMDPose.rotateX(sdlEvent.motion.yrel);
-//            m_mat4ProjectionScreen = m_mat4ProjectionScreen.rotateY(sdlEvent.motion.xrel);
-//            m_mat4ProjectionScreen = m_mat4ProjectionScreen.rotateX(sdlEvent.motion.yrel);
-            m_mat4ScreenPos = m_mat4ScreenPos.rotateY(sdlEvent.motion.xrel);
-            m_mat4ScreenPos = m_mat4ScreenPos.rotateX(sdlEvent.motion.yrel);
+//            dprintf( "Mouse Move %i %i\n", sdlEvent.motion.xrel, sdlEvent.motion.yrel );
+            m_mat4ScreenPos = m_mat4ScreenPos.rotateY((float)sdlEvent.motion.xrel / 10.0f);
+            m_mat4ScreenPos = m_mat4ScreenPos.rotateX((float)sdlEvent.motion.yrel / 10.0f);
         }
 	}
 
 	// Process SteamVR events
 	vr::VREvent_t event;
-	while( m_pHMD->PollNextEvent( &event, sizeof( event ) ) )
+	while( m_vrSystem->PollNextEvent(&event, sizeof( event ) ) )
 	{
 		ProcessVREvent( event );
 	}
@@ -1491,7 +1458,7 @@ bool CMainApplication::HandleInput()
 	for( vr::TrackedDeviceIndex_t unDevice = 0; unDevice < vr::k_unMaxTrackedDeviceCount; unDevice++ )
 	{
 		vr::VRControllerState_t state;
-		if( m_pHMD->GetControllerState( unDevice, &state, sizeof(state) ) )
+		if( m_vrSystem->GetControllerState(unDevice, &state, sizeof(state) ) )
 		{
 			m_rbShowTrackedDevice[ unDevice ] = state.ulButtonPressed == 0;
 		}
@@ -1551,7 +1518,7 @@ void CMainApplication::ProcessVREvent( const vr::VREvent_t & event )
 //-----------------------------------------------------------------------------
 void CMainApplication::RenderFrame()
 {
-	if ( m_pHMD )
+	if ( m_vrSystem )
 	{
 		m_currentCommandBuffer = GetCommandBuffer();
 
@@ -1638,65 +1605,9 @@ void CMainApplication::RenderFrame()
 //-----------------------------------------------------------------------------
 bool CMainApplication::CreateAllShaders()
 {
-	VkResult nResult;
-	std::string sExecutableDirectory = Path_StripFilename( Path_GetExecutablePath() );
-	
-	const char *pShaderNames[ PSO_COUNT ] =
-	{
-		"scene",
-		"axes",
-		"rendermodel",
-		"companion"
-	};
-	const char *pStageNames[ 2 ] =
-	{
-		"vs",
-		"ps"
-	};
+    VkResult nResult;
 
-	// Load the SPIR-V into shader modules
-	for ( int32_t nShader = 0; nShader < PSO_COUNT; nShader++ )
-	{
-		for ( int32_t nStage = 0; nStage <= 1; nStage++ )
-		{
-			char shaderFileName[ 1024 ];
-			sprintf( shaderFileName, "../shaders/%s_%s.spv", pShaderNames[ nShader ], pStageNames[ nStage ] );
-			std::string shaderPath =  Path_MakeAbsolute( shaderFileName, sExecutableDirectory );
-
-			FILE *fp = fopen( shaderPath.c_str(), "rb" );
-			if ( fp == NULL )
-			{
-				dprintf( "Error opening SPIR-V file: %s\n", shaderPath.c_str() );
-				return false;
-			}
-			fseek( fp, 0, SEEK_END );
-			size_t nSize = ftell( fp );
-			fseek( fp, 0, SEEK_SET );
-			
-			char *pBuffer = new char[ nSize ];
-			if ( fread( pBuffer, 1, nSize, fp ) != nSize )
-			{
-				dprintf( "Error reading SPIR-V file: %s\n", shaderPath.c_str() );
-				return false;
-			}
-			fclose( fp );
-
-			// Create the shader module
-			VkShaderModuleCreateInfo shaderModuleCreateInfo = { VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
-			shaderModuleCreateInfo.codeSize = nSize;
-			shaderModuleCreateInfo.pCode = ( const uint32_t *) pBuffer;
-			nResult = vkCreateShaderModule( m_pDevice, &shaderModuleCreateInfo, nullptr, &m_pShaderModules[ nShader * 2 + nStage ] );
-			if ( nResult != VK_SUCCESS )
-			{
-				dprintf( "Error creating shader module for %s, error %d\n", shaderPath.c_str(), nResult );
-				return false;
-			}
-
-			delete [] pBuffer;
-		}
-	}
-
-	// Create a descriptor set layout/pipeline layout compatible with all of our shaders.  See bin/shaders/build_vulkan_shaders.bat for
+    // Create a descriptor set layout/pipeline layout compatible with all of our shaders.  See bin/shaders/build_vulkan_shaders.bat for
 	// how the HLSL is compiled with glslangValidator and binding numbers are generated
 	VkDescriptorSetLayoutBinding layoutBindings[3] = {};
 	layoutBindings[0].binding = 0;
@@ -1724,177 +1635,104 @@ bool CMainApplication::CreateAllShaders()
 		return false;
 	}
 
-	VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
-	pipelineLayoutCreateInfo.pNext = NULL;
-	pipelineLayoutCreateInfo.setLayoutCount = 1;
-	pipelineLayoutCreateInfo.pSetLayouts = &m_pDescriptorSetLayout;
-	pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
-	pipelineLayoutCreateInfo.pPushConstantRanges = NULL;
-	nResult = vkCreatePipelineLayout( m_pDevice, &pipelineLayoutCreateInfo, nullptr, &m_pPipelineLayout );
-	if ( nResult != VK_SUCCESS )
-	{
-		dprintf( "vkCreatePipelineLayout failed with error %d\n", nResult );
-		return false;
-	}
+    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
+    pipelineLayoutCreateInfo.pNext = NULL;
+    pipelineLayoutCreateInfo.setLayoutCount = 1;
+    pipelineLayoutCreateInfo.pSetLayouts = &m_pDescriptorSetLayout;
+    pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
+    pipelineLayoutCreateInfo.pPushConstantRanges = NULL;
+    nResult = vkCreatePipelineLayout( m_pDevice, &pipelineLayoutCreateInfo, nullptr, &m_pPipelineLayout );
+    if ( nResult != VK_SUCCESS )
+    {
+        dprintf( "vkCreatePipelineLayout failed with error %d\n", nResult );
+        return false;
+    }
 
-	// Create pipeline cache
-	VkPipelineCacheCreateInfo pipelineCacheCreateInfo = { VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO };
-	vkCreatePipelineCache( m_pDevice, &pipelineCacheCreateInfo, NULL, &m_pPipelineCache );
-	
-	// Renderpass for each PSO that is compatible with what it will render to
-	VkRenderPass pRenderPasses[ PSO_COUNT ] =
-	{
-            m_leftEyeBufferDesc.m_pRenderPass,
-            m_leftEyeBufferDesc.m_pRenderPass,
-            m_leftEyeBufferDesc.m_pRenderPass,
-            m_pSwapchainRenderPass
-	};
+    // Create pipeline cache
+    VkPipelineCacheCreateInfo pipelineCacheCreateInfo = { VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO };
+    vkCreatePipelineCache( m_pDevice, &pipelineCacheCreateInfo, NULL, &m_pPipelineCache );
 
-	size_t nStrides[ PSO_COUNT ] =
-	{
-		sizeof( VertexDataScene ),			// PSO_SCENE
-		sizeof( float ) * 6,				// PSO_AXES
-		sizeof( vr::RenderModel_Vertex_t ),	// PSO_RENDERMODEL
-		sizeof( VertexDataWindow )			// PSO_SCREEN
-	};
+    //Scene
+    VulkanPipelineStateObject *pScenePipeLineStateObject = new VulkanPipelineStateObject("scene");
+    VkVertexInputAttributeDescription sceneAttributeDescriptions[3]
+            {
+                    {0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0},
+                    {1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(VertexDataScene, texCoord)},
+                    {0, 0, VK_FORMAT_UNDEFINED,        0}
+            };
+    pScenePipeLineStateObject->BInit(m_pDevice,
+                                     m_pDescriptorSetLayout,
+                                     m_pPipelineLayout,
+                                     m_pPipelineCache,
+                                     m_leftEyeBufferDesc.m_pRenderPass,
+                                     VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                                     VK_TRUE,
+                                     sceneAttributeDescriptions,
+                                     sizeof(VertexDataScene));
+    pScenePipeLineStateObject->CreateAllShaders();
+    m_pPipelineStateObjects[PSO_SCENE] = pScenePipeLineStateObject;
 
-	VkVertexInputAttributeDescription attributeDescriptions[ PSO_COUNT * 3 ]
-	{
-		// PSO_SCENE
-		{ 0, 0, VK_FORMAT_R32G32B32_SFLOAT,	0 },
-		{ 1, 0, VK_FORMAT_R32G32_SFLOAT,	offsetof( VertexDataScene, texCoord ) },
-		{ 0, 0, VK_FORMAT_UNDEFINED,		0 },
-		// PSO_AXES
-		{ 0, 0, VK_FORMAT_R32G32B32_SFLOAT,	0 },
-		{ 1, 0, VK_FORMAT_R32G32B32_SFLOAT,	sizeof( float ) * 3 },
-		{ 0, 0, VK_FORMAT_UNDEFINED,		0 },
-		// PSO_RENDERMODEL
-		{ 0, 0, VK_FORMAT_R32G32B32_SFLOAT,	0 },
-		{ 1, 0, VK_FORMAT_R32G32B32_SFLOAT,	offsetof( vr::RenderModel_Vertex_t, vNormal ) },
-		{ 2, 0, VK_FORMAT_R32G32_SFLOAT,	offsetof( vr::RenderModel_Vertex_t, rfTextureCoord ) },
-		// PSO_SCREEN
-		{ 0, 0, VK_FORMAT_R32G32_SFLOAT,	0 },
-		{ 1, 0, VK_FORMAT_R32G32_SFLOAT,	sizeof( float ) * 2 },
-		{ 0, 0, VK_FORMAT_UNDEFINED,		0 },
-	};
+    // Axes
+    VulkanPipelineStateObject *pAxesPipeLineStateObject = new VulkanPipelineStateObject("axes");
+    VkVertexInputAttributeDescription axisAttributeDescriptions[3]
+            {
+                    {0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0},
+                    {1, 0, VK_FORMAT_R32G32B32_SFLOAT, sizeof(float) * 3},
+                    {0, 0, VK_FORMAT_UNDEFINED,        0},
+            };
+    pAxesPipeLineStateObject->BInit(m_pDevice,
+                                    m_pDescriptorSetLayout,
+                                    m_pPipelineLayout,
+                                    m_pPipelineCache,
+                                    m_leftEyeBufferDesc.m_pRenderPass,
+                                    VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
+                                    VK_TRUE,
+                                    axisAttributeDescriptions,
+                                    sizeof(float) * 6);
+    pAxesPipeLineStateObject->CreateAllShaders();
+    m_pPipelineStateObjects[PSO_AXES] = pAxesPipeLineStateObject;
 
-	// Create the PSOs
-	for ( uint32_t nPSO = 0; nPSO < PSO_COUNT; nPSO++ )
-	{
-		VkGraphicsPipelineCreateInfo pipelineCreateInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
-		
-		// VkPipelineVertexInputStateCreateInfo
-		VkVertexInputBindingDescription bindingDescription;
-		bindingDescription.binding = 0;
-		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-		bindingDescription.stride = nStrides[ nPSO ];
-		
-		VkPipelineVertexInputStateCreateInfo vertexInputCreateInfo = { VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
-		for ( uint32_t nAttr = 0; nAttr < 3; nAttr++ )
-		{
-			if ( attributeDescriptions[ nPSO * 3 + nAttr ].format != VK_FORMAT_UNDEFINED )
-			{
-				vertexInputCreateInfo.vertexAttributeDescriptionCount++;
-			}
-		}
-		vertexInputCreateInfo.pVertexAttributeDescriptions = &attributeDescriptions[ nPSO * 3 ];
-		vertexInputCreateInfo.vertexBindingDescriptionCount = 1;
-		vertexInputCreateInfo.pVertexBindingDescriptions = &bindingDescription;
+    // Rendermodel
+    VulkanPipelineStateObject *pRenderModelPipeLineStateObject = new VulkanPipelineStateObject("rendermodel");
+    VkVertexInputAttributeDescription renderModelAttributeDescriptions[3]
+            {
+                    {0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0},
+                    {1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(vr::RenderModel_Vertex_t, vNormal)},
+                    {2, 0, VK_FORMAT_R32G32_SFLOAT,    offsetof(vr::RenderModel_Vertex_t, rfTextureCoord)},
+            };
+    pRenderModelPipeLineStateObject->BInit(m_pDevice,
+                                           m_pDescriptorSetLayout,
+                                           m_pPipelineLayout,
+                                           m_pPipelineCache,
+                                           m_leftEyeBufferDesc.m_pRenderPass,
+                                           VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                                           VK_TRUE,
+                                           renderModelAttributeDescriptions,
+                                           sizeof(vr::RenderModel_Vertex_t));
+    pRenderModelPipeLineStateObject->CreateAllShaders();
+    m_pPipelineStateObjects[PSO_RENDERMODEL] = pRenderModelPipeLineStateObject;
 
-		// VkPipelineDepthStencilStateCreateInfo
-		VkPipelineDepthStencilStateCreateInfo dsState = { VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
-		dsState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-		dsState.depthTestEnable = (nPSO != PSO_SCREEN ) ? VK_TRUE : VK_FALSE;
-		dsState.depthWriteEnable = (nPSO != PSO_SCREEN ) ? VK_TRUE : VK_FALSE;
-		dsState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-		dsState.depthBoundsTestEnable = VK_FALSE;
-		dsState.stencilTestEnable = VK_FALSE;
-		dsState.minDepthBounds = 0.0f;
-		dsState.maxDepthBounds = 0.0f;
+    //Screen
+    VulkanPipelineStateObject *pScreenPipeLineStateObject = new VulkanPipelineStateObject("companion");
+    VkVertexInputAttributeDescription screenAttributeDescriptions[3]
+            {
+                    {0, 0, VK_FORMAT_R32G32_SFLOAT, 0},
+                    {1, 0, VK_FORMAT_R32G32_SFLOAT, sizeof(float) * 2},
+                    {0, 0, VK_FORMAT_UNDEFINED,     0},
+            };
+    pScreenPipeLineStateObject->BInit(m_pDevice,
+                                      m_pDescriptorSetLayout,
+                                      m_pPipelineLayout,
+                                      m_pPipelineCache,
+                                      m_pSwapchainRenderPass,
+                                      VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                                      VK_FALSE,
+                                      screenAttributeDescriptions,
+                                      sizeof(VertexDataWindow));
+    pScreenPipeLineStateObject->CreateAllShaders();
+    m_pPipelineStateObjects[PSO_SCREEN] = pScreenPipeLineStateObject;
 
-		// VkPipelineColorBlendStateCreateInfo
-		VkPipelineColorBlendStateCreateInfo cbState = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
-		cbState.logicOpEnable = VK_FALSE;
-		cbState.logicOp = VK_LOGIC_OP_COPY;
-		VkPipelineColorBlendAttachmentState cbAttachmentState = {};
-		cbAttachmentState.blendEnable = VK_FALSE;
-		cbAttachmentState.colorWriteMask = 0xf;
-		cbState.attachmentCount = 1;
-		cbState.pAttachments = &cbAttachmentState;
-
-		// VkPipelineColorBlendStateCreateInfo
-		VkPipelineRasterizationStateCreateInfo rsState = { VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
-		rsState.polygonMode = VK_POLYGON_MODE_FILL;
-		rsState.cullMode = VK_CULL_MODE_BACK_BIT;
-		rsState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-		rsState.lineWidth = 1.0f;
-
-		// VkPipelineInputAssemblyStateCreateInfo
-		VkPipelineInputAssemblyStateCreateInfo iaState = { VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
-		iaState.topology = ( nPSO == PSO_AXES ) ? VK_PRIMITIVE_TOPOLOGY_LINE_LIST : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		iaState.primitiveRestartEnable = VK_FALSE;
-
-		// VkPipelineMultisampleStateCreateInfo
-		VkPipelineMultisampleStateCreateInfo msState = { VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
-		msState.rasterizationSamples = (nPSO == PSO_SCREEN ) ? VK_SAMPLE_COUNT_1_BIT : ( VkSampleCountFlagBits ) m_nMSAASampleCount;
-		msState.minSampleShading = 0.0f;
-		uint32_t nSampleMask = 0xFFFFFFFF;
-		msState.pSampleMask = &nSampleMask;
-
-		// VkPipelineViewportStateCreateInfo
-		VkPipelineViewportStateCreateInfo vpState = { VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
-		vpState.viewportCount = 1;
-		vpState.scissorCount = 1;
-
-		VkPipelineShaderStageCreateInfo shaderStages[ 2 ] = { };
-		shaderStages[ 0 ].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		shaderStages[ 0 ].stage = VK_SHADER_STAGE_VERTEX_BIT;
-		shaderStages[ 0 ].module = m_pShaderModules[ nPSO * 2 + 0 ];
-		shaderStages[ 0 ].pName = "VSMain";
-		
-		shaderStages[ 1 ].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		shaderStages[ 1 ].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-		shaderStages[ 1 ].module = m_pShaderModules[ nPSO * 2 + 1 ];
-		shaderStages[ 1 ].pName = "PSMain";
-
-		pipelineCreateInfo.layout = m_pPipelineLayout;
-
-		// Set pipeline states
-		pipelineCreateInfo.pVertexInputState = &vertexInputCreateInfo;
-		pipelineCreateInfo.pInputAssemblyState = &iaState;
-		pipelineCreateInfo.pViewportState = &vpState;
-		pipelineCreateInfo.pRasterizationState = &rsState;
-		pipelineCreateInfo.pMultisampleState = &msState;
-		pipelineCreateInfo.pDepthStencilState = &dsState;
-		pipelineCreateInfo.pColorBlendState = &cbState;
-		pipelineCreateInfo.stageCount = 2;
-		pipelineCreateInfo.pStages = &shaderStages[ 0 ];
-		pipelineCreateInfo.renderPass = pRenderPasses[ nPSO ];
-
-		static VkDynamicState dynamicStates[] =
-		{
-			VK_DYNAMIC_STATE_VIEWPORT,
-			VK_DYNAMIC_STATE_SCISSOR,
-		};
-
-		static VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo = {};
-		dynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-		dynamicStateCreateInfo.pNext = NULL;
-		dynamicStateCreateInfo.dynamicStateCount = _countof( dynamicStates );
-		dynamicStateCreateInfo.pDynamicStates = &dynamicStates[ 0 ];
-		pipelineCreateInfo.pDynamicState = &dynamicStateCreateInfo;
-
-
-		// Create the pipeline
-		nResult = vkCreateGraphicsPipelines( m_pDevice, m_pPipelineCache, 1, &pipelineCreateInfo, NULL, &m_pPipelines[ nPSO ] );
-		if ( nResult != VK_SUCCESS )
-		{
-			dprintf( "vkCreateGraphicsPipelines failed with error %d\n", nResult );
-			return false;
-		}
-	}
-
-	return true;
+    return true;
 }
 
 //-----------------------------------------------------------------------------
@@ -2189,7 +2027,7 @@ void CMainApplication::GenMipMapRGBA( const uint8_t *pSrc, uint8_t *pDst, int nS
 //-----------------------------------------------------------------------------
 void CMainApplication::SetupScene()
 {
-	if ( !m_pHMD )
+	if ( !m_vrSystem )
 		return;
 
 	std::vector<float> vertdataarray;
@@ -2330,7 +2168,7 @@ void CMainApplication::AddCubeToScene( Matrix4 mat, std::vector<float> &vertdata
 void CMainApplication::UpdateControllerAxes()
 {
 	// Don't attempt to update controllers if input is not available
-	if( !m_pHMD->IsInputAvailable() )
+	if( !m_vrSystem->IsInputAvailable() )
 		return;
 
 	std::vector<float> vertdataarray;
@@ -2340,10 +2178,10 @@ void CMainApplication::UpdateControllerAxes()
 
 	for ( vr::TrackedDeviceIndex_t unTrackedDevice = vr::k_unTrackedDeviceIndex_Hmd + 1; unTrackedDevice < vr::k_unMaxTrackedDeviceCount; ++unTrackedDevice )
 	{
-		if ( !m_pHMD->IsTrackedDeviceConnected( unTrackedDevice ) )
+		if ( !m_vrSystem->IsTrackedDeviceConnected(unTrackedDevice ) )
 			continue;
 
-		if( m_pHMD->GetTrackedDeviceClass( unTrackedDevice ) != vr::TrackedDeviceClass_Controller )
+		if(m_vrSystem->GetTrackedDeviceClass(unTrackedDevice ) != vr::TrackedDeviceClass_Controller )
 			continue;
 
 		m_iTrackedControllerCount += 1;
@@ -2677,10 +2515,10 @@ CMainApplication::VulkanCommandBuffer_t CMainApplication::GetCommandBuffer()
 //-----------------------------------------------------------------------------
 bool CMainApplication::SetupStereoRenderTargets()
 {
-	if ( !m_pHMD )
+	if ( !m_vrSystem )
 		return false;
 
-	m_pHMD->GetRecommendedRenderTargetSize(&m_nHMDRenderWidth, &m_nHMDRenderHeight );
+	m_vrSystem->GetRecommendedRenderTargetSize(&m_nHMDRenderWidth, &m_nHMDRenderHeight );
     m_nHMDRenderWidth = ( uint32_t )(m_flSuperSampleScale * ( float ) m_nHMDRenderWidth );
     m_nHMDRenderHeight = ( uint32_t )(m_flSuperSampleScale * ( float ) m_nHMDRenderHeight );
 
@@ -2694,7 +2532,7 @@ bool CMainApplication::SetupStereoRenderTargets()
 //-----------------------------------------------------------------------------
 void CMainApplication::SetupScreenWindow()
 {
-	if ( !m_pHMD )
+	if ( !m_vrSystem )
 		return;
 
 //    m_nHMDRenderWidth = ( uint32_t )(m_flSuperSampleScale * ( float ) m_nHMDRenderWidth );
@@ -2883,7 +2721,7 @@ void CMainApplication::RenderScene( RenderTarget target )
 {
 	if( m_bShowCubes )
 	{
-		vkCmdBindPipeline( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelines[ PSO_SCENE ] );
+		vkCmdBindPipeline(m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelineStateObjects[ PSO_SCENE ]->GetPipeline() );
 
 		// Update the persistently mapped pointer to the CB data with the latest matrix
 		memcpy( m_pSceneConstantBufferData[ target ], GetCurrentViewProjectionMatrix( target ).get(), sizeof( Matrix4 ) );
@@ -2896,11 +2734,11 @@ void CMainApplication::RenderScene( RenderTarget target )
 		vkCmdDraw( m_currentCommandBuffer.m_pCommandBuffer, m_uiVertcount, 1, 0, 0 );
 	}
 
-	bool bIsInputAvailable = m_pHMD->IsInputAvailable();
+	bool bIsInputAvailable = m_vrSystem->IsInputAvailable();
 	if( bIsInputAvailable && m_pControllerAxesVertexBuffer != VK_NULL_HANDLE )
 	{
 		// draw the controller axis lines
-		vkCmdBindPipeline( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelines[ PSO_AXES ] );
+		vkCmdBindPipeline(m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelineStateObjects[ PSO_AXES ]->GetPipeline() );
 
 		VkDeviceSize nOffsets[ 1 ] = { 0 };
 		vkCmdBindVertexBuffers( m_currentCommandBuffer.m_pCommandBuffer, 0, 1, &m_pControllerAxesVertexBuffer, &nOffsets[ 0 ] );
@@ -2908,7 +2746,7 @@ void CMainApplication::RenderScene( RenderTarget target )
 	}
 
 	// ----- Render Model rendering -----
-	vkCmdBindPipeline( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelines[ PSO_RENDERMODEL ] );
+	vkCmdBindPipeline(m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelineStateObjects[ PSO_RENDERMODEL ]->GetPipeline() );
 	for( uint32_t unTrackedDevice = 0; unTrackedDevice < vr::k_unMaxTrackedDeviceCount; unTrackedDevice++ )
 	{
 		if( !m_rTrackedDeviceToRenderModel[ unTrackedDevice ] || !m_rbShowTrackedDevice[ unTrackedDevice ] )
@@ -2918,7 +2756,7 @@ void CMainApplication::RenderScene( RenderTarget target )
 		if( !pose.bPoseIsValid )
 			continue;
 
-		if( !bIsInputAvailable && m_pHMD->GetTrackedDeviceClass( unTrackedDevice ) == vr::TrackedDeviceClass_Controller )
+		if(!bIsInputAvailable && m_vrSystem->GetTrackedDeviceClass(unTrackedDevice ) == vr::TrackedDeviceClass_Controller )
 			continue;
 
 		const Matrix4 & matDeviceToTracking = m_rmat4DevicePose[ unTrackedDevice ];
@@ -2981,7 +2819,7 @@ void CMainApplication::RenderStereoCompanionWindow()
 	vkCmdSetScissor( m_currentCommandBuffer.m_pCommandBuffer, 0, 1, &scissor );
 
 	// Bind the pipeline and descriptor set
-	vkCmdBindPipeline( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelines[ PSO_SCREEN ] );
+	vkCmdBindPipeline(m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelineStateObjects[ PSO_SCREEN ]->GetPipeline() );
 	vkCmdBindDescriptorSets( m_currentCommandBuffer.m_pCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pPipelineLayout, 0, 1, &m_pDescriptorSets[ DESCRIPTOR_SET_SCREEN_TEXTURE ], 0, nullptr );
 
 	// Draw left eye texture to companion window
@@ -3079,10 +2917,10 @@ void CMainApplication::RenderScreen()
 //-----------------------------------------------------------------------------
 Matrix4 CMainApplication::GetHMDMatrixProjectionEye( vr::Hmd_Eye nEye )
 {
-    if ( !m_pHMD )
+    if ( !m_vrSystem )
         return Matrix4();
 
-    vr::HmdMatrix44_t mat = m_pHMD->GetProjectionMatrix( nEye, m_fNearClip, m_fFarClip );
+    vr::HmdMatrix44_t mat = m_vrSystem->GetProjectionMatrix(nEye, m_fNearClip, m_fFarClip );
 
     return Matrix4(
             mat.m[0][0], mat.m[1][0], mat.m[2][0], mat.m[3][0],
@@ -3098,10 +2936,10 @@ Matrix4 CMainApplication::GetHMDMatrixProjectionEye( vr::Hmd_Eye nEye )
 //-----------------------------------------------------------------------------
 Matrix4 CMainApplication::GetHMDMatrixPoseEye( vr::Hmd_Eye nEye )
 {
-	if ( !m_pHMD )
+	if ( !m_vrSystem )
 		return Matrix4();
 
-	vr::HmdMatrix34_t matEyeRight = m_pHMD->GetEyeToHeadTransform( nEye );
+	vr::HmdMatrix34_t matEyeRight = m_vrSystem->GetEyeToHeadTransform(nEye );
 	Matrix4 matrixObj(
 		matEyeRight.m[0][0], matEyeRight.m[1][0], matEyeRight.m[2][0], 0.0, 
 		matEyeRight.m[0][1], matEyeRight.m[1][1], matEyeRight.m[2][1], 0.0,
@@ -3146,7 +2984,7 @@ Matrix4 CMainApplication::GetCurrentCameraViewProjectionMatrix( uint8_t cameraIn
 //-----------------------------------------------------------------------------
 void CMainApplication::UpdateHMDMatrixPose()
 {
-	if ( !m_pHMD )
+	if ( !m_vrSystem )
 		return;
 
 	vr::VRCompositor()->WaitGetPoses(m_rTrackedDevicePose, vr::k_unMaxTrackedDeviceCount, NULL, 0 );
@@ -3161,7 +2999,7 @@ void CMainApplication::UpdateHMDMatrixPose()
 			m_rmat4DevicePose[nDevice] = ConvertSteamVRMatrixToMatrix4( m_rTrackedDevicePose[nDevice].mDeviceToAbsoluteTracking );
 			if (m_rDevClassChar[nDevice]==0)
 			{
-				switch (m_pHMD->GetTrackedDeviceClass(nDevice))
+				switch (m_vrSystem->GetTrackedDeviceClass(nDevice))
 				{
 				case vr::TrackedDeviceClass_Controller:        m_rDevClassChar[nDevice] = 'C'; break;
 				case vr::TrackedDeviceClass_HMD:               m_rDevClassChar[nDevice] = 'H'; break;
@@ -3301,11 +3139,11 @@ void CMainApplication::SetupRenderModelForTrackedDevice( vr::TrackedDeviceIndex_
 		return;
 
 	// try to find a model we've already set up
-	std::string sRenderModelName = GetTrackedDeviceString( m_pHMD, unTrackedDeviceIndex, vr::Prop_RenderModelName_String );
+	std::string sRenderModelName = GetTrackedDeviceString(m_vrSystem, unTrackedDeviceIndex, vr::Prop_RenderModelName_String );
 	VulkanRenderModel *pRenderModel = FindOrLoadRenderModel( unTrackedDeviceIndex, sRenderModelName.c_str() );
 	if( !pRenderModel )
 	{
-		std::string sTrackingSystemName = GetTrackedDeviceString( m_pHMD, unTrackedDeviceIndex, vr::Prop_TrackingSystemName_String );
+		std::string sTrackingSystemName = GetTrackedDeviceString(m_vrSystem, unTrackedDeviceIndex, vr::Prop_TrackingSystemName_String );
 		dprintf( "Unable to load render model for tracked device %d (%s.%s)", unTrackedDeviceIndex, sTrackingSystemName.c_str(), sRenderModelName.c_str() );
 	}
 	else
@@ -3322,12 +3160,12 @@ void CMainApplication::SetupRenderModels()
 {
 	memset( m_rTrackedDeviceToRenderModel, 0, sizeof( m_rTrackedDeviceToRenderModel ) );
 
-	if( !m_pHMD )
+	if( !m_vrSystem )
 		return;
 
 	for( uint32_t unTrackedDevice = vr::k_unTrackedDeviceIndex_Hmd + 1; unTrackedDevice < vr::k_unMaxTrackedDeviceCount; unTrackedDevice++ )
 	{
-		if( !m_pHMD->IsTrackedDeviceConnected( unTrackedDevice ) )
+		if( !m_vrSystem->IsTrackedDeviceConnected(unTrackedDevice ) )
 			continue;
 
 		SetupRenderModelForTrackedDevice( unTrackedDevice );

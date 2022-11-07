@@ -33,8 +33,13 @@ VulkanRenderModel::~VulkanRenderModel()
 //-----------------------------------------------------------------------------
 // Purpose: Allocates and populates the Vulkan resources for a render model
 //-----------------------------------------------------------------------------
-bool VulkanRenderModel::BInit( VkDevice pDevice, const VkPhysicalDeviceMemoryProperties &memoryProperties, VkCommandBuffer pCommandBuffer, vr::TrackedDeviceIndex_t unTrackedDeviceIndex, VkDescriptorSet pDescriptorSets[ 3 ], const vr::RenderModel_t & vrModel, const vr::RenderModel_TextureMap_t & vrDiffuseTexture )
-{
+bool VulkanRenderModel::BInit(VkDevice pDevice,
+                              const VkPhysicalDeviceMemoryProperties &memoryProperties,
+                              VkCommandBuffer pCommandBuffer,
+                              vr::TrackedDeviceIndex_t unTrackedDeviceIndex,
+                              VkDescriptorSet pDescriptorSets[3],
+                              const vr::RenderModel_t &vrModel,
+                              const vr::RenderModel_TextureMap_t &vrDiffuseTexture) {
     m_pDevice = pDevice;
     m_physicalDeviceMemoryProperties = memoryProperties;
     m_unTrackedDeviceIndex = unTrackedDeviceIndex;

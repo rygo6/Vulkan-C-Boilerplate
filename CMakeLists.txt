@@ -11,7 +11,7 @@ file(GLOB SRC_FILES
 
 add_executable(${TARGET_NAME}
         ${SRC_FILES}
-        src/vulkan_render_model.h src/vulkan_render_model.cpp src/vulkan_utility.h)
+        src/vulkan_render_model.h src/vulkan_render_model.cpp src/vulkan_utility.h src/vulkan_pipeline_state_object.cpp src/vulkan_pipeline_state_object.h)
 
 target_link_directories(${TARGET_NAME} PUBLIC
         thirdparty/sdl2-2.0.3/bin/win64

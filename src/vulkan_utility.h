@@ -6,8 +6,37 @@
 #include <stdio.h>
 #include "vulkan/vulkan.h"
 #include "openvr.h"
+#include "Vectors.h"
 
 static bool g_bPrintf = true;
+
+struct FramebufferDesc
+{
+    VkImage m_pImage;
+    VkImageLayout m_nImageLayout;
+    VkDeviceMemory m_pDeviceMemory;
+    VkImageView m_pImageView;
+    VkImage m_pDepthStencilImage;
+    VkImageLayout m_nDepthStencilImageLayout;
+    VkDeviceMemory m_pDepthStencilDeviceMemory;
+    VkImageView m_pDepthStencilImageView;
+    VkRenderPass m_pRenderPass;
+    VkFramebuffer m_pFramebuffer;
+};
+
+struct VertexDataScene
+{
+    Vector3 position;
+    Vector2 texCoord;
+};
+
+struct VertexDataWindow
+{
+    Vector2 position;
+    Vector2 texCoord;
+
+    VertexDataWindow( const Vector2 & pos, const Vector2 tex ) :  position(pos), texCoord(tex) {	}
+};
 
 // Pipeline state objects
 enum PipelineStateObjectEnum_t
