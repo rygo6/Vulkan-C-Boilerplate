@@ -4,30 +4,32 @@ set(TARGET_NAME fabric_ovr_vulkan)
 cmake_minimum_required(VERSION 3.20)
 set(CMAKE_CXX_STANDARD 17)
 
+set(VULKAN_SDK_PATH "C:/VulkanSDK/1.3.231.1")
+set(GLFW_SDK_PATH "C:/Developer/glfw-3.3.8.bin.WIN64")
+
 file(GLOB SRC_FILES
-        src/*.cpp
+        src/*.c
         src/*.h
         )
 
 add_executable(${TARGET_NAME}
         ${SRC_FILES}
-        src/vulkan_render_model.h src/vulkan_render_model.cpp src/vulkan_utility.h src/vulkan_pipeline_state_object.cpp src/vulkan_pipeline_state_object.h)
+)
 
 target_link_directories(${TARGET_NAME} PUBLIC
-        thirdparty/sdl2-2.0.3/bin/win64
-        thirdparty/vulkan-1.0.49.0/lib/win64
-        thirdparty/openvr/lib/win64
+        lib
+        "${VULKAN_SDK_PATH}/Lib"
+        "${GLFW_SDK_PATH}/lib-mingw-w64"
 )
 target_link_libraries(${TARGET_NAME}
-        SDL2.lib
-        SDL2main.lib
-        vulkan-1.lib
-        openvr_api.lib
+        glfw3
+        gdi32
+        vulkan-1
         )
 
 target_include_directories(${TARGET_NAME} PUBLIC
-        thirdparty/sdl2-2.0.3/include
-        thirdparty/vulkan-1.0.49.0/include
-        thirdparty/openvr/headers
+        include
+        "${VULKAN_SDK_PATH}/Include"
+        "${GLFW_SDK_PATH}/include"
 )
 
