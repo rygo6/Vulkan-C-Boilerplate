@@ -26,12 +26,12 @@ typedef struct FabricState {
 
     VkSwapchainKHR swapChain;
     uint32_t swapChainImageCount;
-    VkImage *swapChainImages;
-    VkImageView *swapChainImageViews;
+    VkImage *pSwapChainImages;
+    VkImageView *pSwapChainImageViews;
     VkFormat swapChainImageFormat;
     VkExtent2D swapChainExtent;
 
-    VkFramebuffer *swapChainFramebuffers;
+    VkFramebuffer *pSwapChainFramebuffers;
 
     VkRenderPass renderPass;
     VkPipelineLayout pipelineLayout;
@@ -57,6 +57,8 @@ const char* requiredExtensions[] = {
 };
 
 void initWindow(FabricAppState* pState) {
+    printf( "%s - initializing fabric window!\n", __FUNCTION__ );
+
     glfwInit();
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -450,20 +452,20 @@ void createSwapChain(FabricAppState* pState) {
     }
 
     vkGetSwapchainImagesKHR(pState->device, pState->swapChain, &pState->swapChainImageCount, NULL);
-    pState->swapChainImages =  malloc(sizeof(VkImage) * pState->swapChainImageCount);
-    vkGetSwapchainImagesKHR(pState->device, pState->swapChain, &pState->swapChainImageCount, pState->swapChainImages);
+    pState->pSwapChainImages =  malloc(sizeof(VkImage) * pState->swapChainImageCount);
+    vkGetSwapchainImagesKHR(pState->device, pState->swapChain, &pState->swapChainImageCount, pState->pSwapChainImages);
 
     pState->swapChainImageFormat = surfaceFormat.format;
     pState->swapChainExtent = extent;
 }
 
 void createImageViews(FabricAppState* pState) {
-    pState->swapChainImageViews =  malloc(sizeof(VkImageView) * pState->swapChainImageCount);
+    pState->pSwapChainImageViews =  malloc(sizeof(VkImageView) * pState->swapChainImageCount);
 
     for (size_t i = 0; i < pState->swapChainImageCount; i++) {
         VkImageViewCreateInfo createInfo = {
                 .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                .image = pState->swapChainImages[i],
+                .image = pState->pSwapChainImages[i],
                 .viewType = VK_IMAGE_VIEW_TYPE_2D,
                 .format = pState->swapChainImageFormat,
                 .components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -477,7 +479,7 @@ void createImageViews(FabricAppState* pState) {
                 .subresourceRange.layerCount = 1,
         };
 
-        if (vkCreateImageView(pState->device, &createInfo, NULL, &pState->swapChainImageViews[i]) != VK_SUCCESS) {
+        if (vkCreateImageView(pState->device, &createInfo, NULL, &pState->pSwapChainImageViews[i]) != VK_SUCCESS) {
             printf( "%s - failed to create image views!\n", __FUNCTION__ );
         }
     }
@@ -690,11 +692,11 @@ void createGraphicsPipeline(FabricAppState* pState) {
 }
 
 void createFramebuffers(FabricAppState* pState) {
-    pState->swapChainFramebuffers = malloc(sizeof(VkFramebuffer) * pState->swapChainImageCount);
+    pState->pSwapChainFramebuffers = malloc(sizeof(VkFramebuffer) * pState->swapChainImageCount);
 
     for (size_t i = 0; i < pState->swapChainImageCount; i++) {
         VkImageView attachments[] = {
-                pState->swapChainImageViews[i]
+                pState->pSwapChainImageViews[i]
         };
 
         VkFramebufferCreateInfo framebufferInfo = {
@@ -707,7 +709,7 @@ void createFramebuffers(FabricAppState* pState) {
                 .layers = 1,
         };
 
-        if (vkCreateFramebuffer(pState->device, &framebufferInfo, NULL, &pState->swapChainFramebuffers[i]) != VK_SUCCESS) {
+        if (vkCreateFramebuffer(pState->device, &framebufferInfo, NULL, &pState->pSwapChainFramebuffers[i]) != VK_SUCCESS) {
             printf("%s - failed to create framebuffer!\n", __FUNCTION__);
         }
     }
@@ -767,7 +769,7 @@ void recordCommandBuffer(FabricAppState* pState, uint32_t imageIndex) {
     VkRenderPassBeginInfo renderPassInfo = {
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
             .renderPass = pState->renderPass,
-            .framebuffer = pState->swapChainFramebuffers[imageIndex],
+            .framebuffer = pState->pSwapChainFramebuffers[imageIndex],
             .renderArea.offset = {0, 0},
             .renderArea.extent = pState->swapChainExtent,
     };
@@ -853,6 +855,7 @@ void drawFrame(FabricAppState* pState) {
 }
 
 void initVulkan(FabricAppState* pState) {
+    printf( "%s - initializing vulkan!\n", __FUNCTION__ );
     createInstance(pState);
     setupDebugMessenger(pState);
     createSurface(pState);
@@ -869,6 +872,8 @@ void initVulkan(FabricAppState* pState) {
 }
 
 void mainLoop(FabricAppState* pState) {
+    printf( "%s - fabric mainloop starting!\n", __FUNCTION__ );
+
     while (!glfwWindowShouldClose(pState->pWindow)) {
         glfwPollEvents();
         drawFrame(pState);
@@ -878,11 +883,7 @@ void mainLoop(FabricAppState* pState) {
 }
 
 void cleanup(FabricAppState* pState) {
-    vkDestroyInstance(pState->instance, NULL);
-
-    glfwDestroyWindow(pState->pWindow);
-
-    glfwTerminate();
+    printf("%s - cleaning up fabric!\n", __FUNCTION__);
 
     vkDestroySemaphore(pState->device, pState->renderFinishedSemaphore, NULL);
     vkDestroySemaphore(pState->device, pState->imageAvailableSemaphore, NULL);
@@ -891,7 +892,7 @@ void cleanup(FabricAppState* pState) {
     vkDestroyCommandPool(pState->device, pState->commandPool, NULL);
 
     for (int i = 0; i < pState->swapChainImageCount; ++i) {
-        vkDestroyFramebuffer(pState->device, pState->swapChainFramebuffers[i], NULL);
+        vkDestroyFramebuffer(pState->device, pState->pSwapChainFramebuffers[i], NULL);
     }
 
     vkDestroyPipeline(pState->device, pState->graphicsPipeline, NULL);
@@ -899,7 +900,7 @@ void cleanup(FabricAppState* pState) {
     vkDestroyRenderPass(pState->device, pState->renderPass, NULL);
 
     for (int i = 0; i < pState->swapChainImageCount; ++i) {
-        vkDestroyImageView(pState->device, pState->swapChainImageViews[i], NULL);
+        vkDestroyImageView(pState->device, pState->pSwapChainImageViews[i], NULL);
     }
 
     vkDestroySwapchainKHR(pState->device, pState->swapChain, NULL);
@@ -920,7 +921,7 @@ void cleanup(FabricAppState* pState) {
 
 int main(int argc, char *argv[])
 {
-    printf( "%s - Start Fabric!\n", __FUNCTION__ );
+    printf( "%s - Starting up Fabric!\n", __FUNCTION__ );
 
     FabricAppState *pState;
     pState = malloc(sizeof(*pState));
