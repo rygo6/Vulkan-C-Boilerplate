@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-typedef struct FabricState {
+typedef struct AppState {
     int screenWidth;
     int screenHeight;
 
@@ -44,7 +44,7 @@ typedef struct FabricState {
     VkSemaphore renderFinishedSemaphore;
     VkFence inFlightFence;
 
-} FabricAppState;
+} AppState;
 
 const uint32_t validationLayersCount = 1;
 const char* validationLayers[] = {
@@ -56,15 +56,15 @@ const char* requiredExtensions[] = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
 };
 
-void initWindow(FabricAppState* pState) {
-    printf( "%s - initializing fabric window!\n", __FUNCTION__ );
+void initWindow(AppState* pState) {
+    printf( "%s - initializing app window!\n", __FUNCTION__ );
 
     glfwInit();
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-    pState->pWindow = glfwCreateWindow(pState->screenWidth, pState->screenHeight, "Fabric", NULL, NULL);
+    pState->pWindow = glfwCreateWindow(pState->screenWidth, pState->screenHeight, "app", NULL, NULL);
     if (pState->pWindow == NULL) {
         printf( "%s - unable to initialize GLFW Window!\n", __FUNCTION__ );
     }
@@ -126,7 +126,7 @@ bool checkValidationLayerSupport() {
     return true;
 }
 
-void getRequiredExtensions(FabricAppState *pState, uint32_t* extensionCount, const char** pExtensions) {
+void getRequiredExtensions(AppState *pState, uint32_t* extensionCount, const char** pExtensions) {
     uint32_t glfwExtensionCount = 0;
     const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
@@ -144,14 +144,14 @@ void getRequiredExtensions(FabricAppState *pState, uint32_t* extensionCount, con
     }
 }
 
-void createInstance(FabricAppState* pState) {
+void createInstance(AppState* pState) {
     if (pState->enableValidationLayers && !checkValidationLayerSupport()) {
         printf( "%s - validation layers requested, but not available!\n", __FUNCTION__ );
     }
 
     VkApplicationInfo appInfo = {
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-        .pApplicationName = "Fabric Vulkan",
+        .pApplicationName = "Vulkan",
         .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
         .pEngineName = NULL,
         .engineVersion = VK_MAKE_VERSION(1, 0, 0),
@@ -190,7 +190,7 @@ void createInstance(FabricAppState* pState) {
     }
 }
 
-void setupDebugMessenger(FabricAppState* pState) {
+void setupDebugMessenger(AppState* pState) {
     if (!pState->enableValidationLayers)
         return;
 
@@ -202,7 +202,7 @@ void setupDebugMessenger(FabricAppState* pState) {
     }
 }
 
-bool createSurface(FabricAppState* pState) {
+bool createSurface(AppState* pState) {
     if (glfwCreateWindowSurface(pState->instance, pState->pWindow, NULL, &pState->surface) != VK_SUCCESS) {
         printf( "%s - failed to create window surface!\n", __FUNCTION__ );
         return false;
@@ -211,7 +211,7 @@ bool createSurface(FabricAppState* pState) {
     return true;
 }
 
-bool findQueueFamilies(FabricAppState* pState) {
+bool findQueueFamilies(AppState* pState) {
     uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(pState->physicalDevice, &queueFamilyCount, NULL);
     VkQueueFamilyProperties queueFamilies[queueFamilyCount];
@@ -239,7 +239,7 @@ bool findQueueFamilies(FabricAppState* pState) {
     return false;
 }
 
-void pickPhysicalDevice(FabricAppState* pState) {
+void pickPhysicalDevice(AppState* pState) {
     uint32_t deviceCount = 0;
     vkEnumeratePhysicalDevices(pState->instance, &deviceCount, NULL);
 
@@ -255,7 +255,7 @@ void pickPhysicalDevice(FabricAppState* pState) {
     pState->physicalDevice = devices[0];
 }
 
-bool createLogicalDevice(FabricAppState* pState) {
+bool createLogicalDevice(AppState* pState) {
     if (!findQueueFamilies(pState)){
         return false;
     }
@@ -349,7 +349,7 @@ VkPresentModeKHR chooseSwapPresentMode(const VkPresentModeKHR *availablePresentM
     return swapChainPresentMode;
 }
 
-VkExtent2D chooseSwapExtent(FabricAppState* pState, const VkSurfaceCapabilitiesKHR capabilities) {
+VkExtent2D chooseSwapExtent(AppState* pState, const VkSurfaceCapabilitiesKHR capabilities) {
     // Logic from OVR Vulkan sample. Logic little different from vulkan tutorial
     VkExtent2D extents;
     if ( capabilities.currentExtent.width == -1 )
@@ -367,7 +367,7 @@ VkExtent2D chooseSwapExtent(FabricAppState* pState, const VkSurfaceCapabilitiesK
     return extents;
 }
 
-void createSwapChain(FabricAppState* pState) {
+void createSwapChain(AppState* pState) {
     // Logic from OVR Vulkan example
     VkSurfaceCapabilitiesKHR capabilities;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pState->physicalDevice, pState->surface, &capabilities);
@@ -459,7 +459,7 @@ void createSwapChain(FabricAppState* pState) {
     pState->swapChainExtent = extent;
 }
 
-void createImageViews(FabricAppState* pState) {
+void createImageViews(AppState* pState) {
     pState->pSwapChainImageViews =  malloc(sizeof(VkImageView) * pState->swapChainImageCount);
 
     for (size_t i = 0; i < pState->swapChainImageCount; i++) {
@@ -485,7 +485,7 @@ void createImageViews(FabricAppState* pState) {
     }
 }
 
-void createRenderPass(FabricAppState* pState) {
+void createRenderPass(AppState* pState) {
     VkAttachmentDescription colorAttachment = {
             .format = pState->swapChainImageFormat,
             .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -553,7 +553,7 @@ static char* readBinaryFile(const char* filename, uint32_t *length) {
     return contents;
 }
 
-VkShaderModule createShaderModule(FabricAppState* pState, const char* code, const uint32_t codeLength) {
+VkShaderModule createShaderModule(AppState* pState, const char* code, const uint32_t codeLength) {
     VkShaderModuleCreateInfo createInfo = {
             .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
             .codeSize = codeLength,
@@ -568,7 +568,7 @@ VkShaderModule createShaderModule(FabricAppState* pState, const char* code, cons
     return shaderModule;
 }
 
-void createGraphicsPipeline(FabricAppState* pState) {
+void createGraphicsPipeline(AppState* pState) {
     uint32_t vertLength;
     const char* vertShaderCode = readBinaryFile("./shaders/vert.spv", &vertLength);
     uint32_t fragLength;
@@ -691,7 +691,7 @@ void createGraphicsPipeline(FabricAppState* pState) {
     vkDestroyShaderModule(pState->device, vertShaderModule, NULL);
 }
 
-void createFramebuffers(FabricAppState* pState) {
+void createFramebuffers(AppState* pState) {
     pState->pSwapChainFramebuffers = malloc(sizeof(VkFramebuffer) * pState->swapChainImageCount);
 
     for (size_t i = 0; i < pState->swapChainImageCount; i++) {
@@ -715,7 +715,7 @@ void createFramebuffers(FabricAppState* pState) {
     }
 }
 
-void createCommandPool(FabricAppState* pState) {
+void createCommandPool(AppState* pState) {
     VkCommandPoolCreateInfo poolInfo = {
             .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
             .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
@@ -727,7 +727,7 @@ void createCommandPool(FabricAppState* pState) {
     }
 }
 
-void createCommandBuffer(FabricAppState* pState) {
+void createCommandBuffer(AppState* pState) {
     VkCommandBufferAllocateInfo allocInfo = {
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
             .commandPool = pState->commandPool,
@@ -740,7 +740,7 @@ void createCommandBuffer(FabricAppState* pState) {
     }
 }
 
-void createSyncObjects(FabricAppState* pState) {
+void createSyncObjects(AppState* pState) {
     VkSemaphoreCreateInfo semaphoreInfo = {
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
     };
@@ -757,7 +757,7 @@ void createSyncObjects(FabricAppState* pState) {
     }
 }
 
-void recordCommandBuffer(FabricAppState* pState, uint32_t imageIndex) {
+void recordCommandBuffer(AppState* pState, uint32_t imageIndex) {
     VkCommandBufferBeginInfo beginInfo = {
             beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
     };
@@ -807,7 +807,7 @@ void recordCommandBuffer(FabricAppState* pState, uint32_t imageIndex) {
     }
 }
 
-void drawFrame(FabricAppState* pState) {
+void drawFrame(AppState* pState) {
     vkWaitForFences(pState->device, 1, &pState->inFlightFence, VK_TRUE, UINT64_MAX);
     vkResetFences(pState->device, 1, &pState->inFlightFence);
 
@@ -854,7 +854,7 @@ void drawFrame(FabricAppState* pState) {
     vkQueuePresentKHR(pState->queue, &presentInfo);
 }
 
-void initVulkan(FabricAppState* pState) {
+void initVulkan(AppState* pState) {
     printf( "%s - initializing vulkan!\n", __FUNCTION__ );
     createInstance(pState);
     setupDebugMessenger(pState);
@@ -871,8 +871,8 @@ void initVulkan(FabricAppState* pState) {
     createSyncObjects(pState);
 }
 
-void mainLoop(FabricAppState* pState) {
-    printf( "%s - fabric mainloop starting!\n", __FUNCTION__ );
+void mainLoop(AppState* pState) {
+    printf( "%s - app mainloop starting!\n", __FUNCTION__ );
 
     while (!glfwWindowShouldClose(pState->pWindow)) {
         glfwPollEvents();
@@ -882,8 +882,8 @@ void mainLoop(FabricAppState* pState) {
     vkDeviceWaitIdle(pState->device);
 }
 
-void cleanup(FabricAppState* pState) {
-    printf("%s - cleaning up fabric!\n", __FUNCTION__);
+void cleanup(AppState* pState) {
+    printf("%s - cleaning up app!\n", __FUNCTION__);
 
     vkDestroySemaphore(pState->device, pState->renderFinishedSemaphore, NULL);
     vkDestroySemaphore(pState->device, pState->imageAvailableSemaphore, NULL);
@@ -921,9 +921,9 @@ void cleanup(FabricAppState* pState) {
 
 int main(int argc, char *argv[])
 {
-    printf( "%s - Starting up Fabric!\n", __FUNCTION__ );
+    printf( "%s - Starting up app!\n", __FUNCTION__ );
 
-    FabricAppState *pState;
+    AppState *pState;
     pState = malloc(sizeof(*pState));
     memset(pState, 0, sizeof( *pState ) );
     pState->screenWidth = 800;
