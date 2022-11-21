@@ -935,6 +935,8 @@ int main(int argc, char *argv[])
         
     mainLoop(pState);
     cleanup(pState);
+    
+    free(pState);
 
     return 0;
 }
