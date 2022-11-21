@@ -35,14 +35,3 @@ target_include_directories(${TARGET_NAME} PUBLIC
         "${VULKAN_SDK_PATH}/Include"
         "${GLFW_SDK_PATH}/include"
 )
-
-
-find_package(Vulkan)
-
-# Try extracting VulkanSDK path from ${Vulkan_INCLUDE_DIRS}
-if (NOT ${Vulkan_INCLUDE_DIRS} STREQUAL "")
-    set(VULKAN_PATH ${Vulkan_INCLUDE_DIRS})
-    STRING(REGEX REPLACE "/Include" "" VULKAN_PATH ${VULKAN_PATH})
-endif()
-
-set(VULKAN_LIB_LIST "vulkan-1")
