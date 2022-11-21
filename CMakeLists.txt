@@ -1,6 +1,6 @@
-project(Fabric)
+project(Vulkan-C-Boilerplate)
 
-set(TARGET_NAME fabric_ovr_vulkan)
+set(TARGET_NAME vulkan_c_boilerplate)
 cmake_minimum_required(VERSION 3.20)
 set(CMAKE_CXX_STANDARD 17)
 
