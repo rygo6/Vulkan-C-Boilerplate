@@ -7,6 +7,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(VULKAN_SDK_PATH "C:/VulkanSDK/1.3.231.1")
 set(GLFW_SDK_PATH "C:/Developer/glfw-3.3.8.bin.WIN64")
 
+#set(VULKAN_SDK_PATH "/mnt/c/VulkanSDK/1.3.231.1")
+#set(GLFW_SDK_PATH "/mnt/c/Developer/glfw-3.3.8.bin.WIN64")
+
 file(GLOB SRC_FILES
         src/*.c
         src/*.h
@@ -33,3 +36,13 @@ target_include_directories(${TARGET_NAME} PUBLIC
         "${GLFW_SDK_PATH}/include"
 )
 
+
+find_package(Vulkan)
+
+# Try extracting VulkanSDK path from ${Vulkan_INCLUDE_DIRS}
+if (NOT ${Vulkan_INCLUDE_DIRS} STREQUAL "")
+    set(VULKAN_PATH ${Vulkan_INCLUDE_DIRS})
+    STRING(REGEX REPLACE "/Include" "" VULKAN_PATH ${VULKAN_PATH})
+endif()
+
+set(VULKAN_LIB_LIST "vulkan-1")
